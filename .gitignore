@@ -1,0 +1,6 @@
+target/
+.idea/
+*.iml
+.vscode/
+.mvn/wrapper/maven-wrapper.jar
+.claude/

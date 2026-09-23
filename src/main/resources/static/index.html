@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Монополия</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="lobby-screen" class="panel">
+    <h1>Монополия</h1>
+    <label>Ваше имя <input id="name-input" maxlength="20" autocomplete="off"></label>
+    <div class="row">
+        <button id="create-btn">Создать комнату</button>
+    </div>
+    <div class="row">
+        <input id="room-input" placeholder="Код комнаты" maxlength="6" inputmode="numeric">
+        <button id="join-btn">Войти</button>
+    </div>
+</section>
+
+<section id="waiting-screen" class="panel hidden">
+    <h2>Комната <span id="room-code"></span></h2>
+    <p>Передайте код друзьям. Игроки:</p>
+    <ul id="waiting-players"></ul>
+    <button id="start-btn">Начать игру</button>
+</section>
+
+<section id="game-screen" class="hidden">
+    <div id="board">
+        <div id="center">
+            <div id="status"></div>
+            <div id="dice"></div>
+            <div id="card" class="hidden">
+                <div class="card-deck"></div>
+                <div class="card-text"></div>
+            </div>
+            <div id="actions">
+                <button data-cmd="ROLL">Бросить кубики</button>
+                <button data-cmd="BUY">Купить</button>
+                <button data-cmd="DECLINE">Не покупать</button>
+                <button data-cmd="PAY_JAIL_FINE">Заплатить $50</button>
+                <button data-cmd="USE_JAIL_CARD">Использовать карточку</button>
+                <button data-cmd="END_TURN">Завершить ход</button>
+            </div>
+            <table id="players"></table>
+            <ol id="log"></ol>
+        </div>
+    </div>
+</section>
+
+<div id="error" class="hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
