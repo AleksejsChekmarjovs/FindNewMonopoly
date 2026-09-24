@@ -3,6 +3,7 @@ package com.example.monopoly.engine;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Снимок состояния игры, который целиком отправляется клиентам. */
@@ -13,6 +14,7 @@ public record GameView(
         Map<Integer, Integer> buildings,
         int housesInBank,
         int hotelsInBank,
+        Set<Integer> mortgaged,
         Map<ColorGroup, Integer> houseCosts,
         String currentPlayerId,
         TurnPhase phase,
@@ -50,6 +52,7 @@ public record GameView(
                 game.buildings(),
                 game.housesInBank(),
                 game.hotelsInBank(),
+                game.mortgaged(),
                 HOUSE_COSTS,
                 game.current().id(),
                 game.phase(),

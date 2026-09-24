@@ -4,8 +4,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Состояние одной партии и все правила. Класс НЕ потокобезопасен:
@@ -31,6 +33,8 @@ public class Game {
     private final Map<Integer, Integer> buildings = new HashMap<>();
     private int housesInBank = BANK_HOUSES;
     private int hotelsInBank = BANK_HOTELS;
+    /** заложенные клетки */
+    private final Set<Integer> mortgaged = new HashSet<>();
     private final Deque<String> log = new ArrayDeque<>();
     private final Deck chance;
     private final Deck communityChest;
@@ -178,10 +182,13 @@ public class Game {
     }
 
     public void buildHouse(String playerId, int tileIndex) {
-        Player p = requireBuildingTime(playerId);
+        Player p = requireManagementTime(playerId);
         Tile tile = requireOwnStreet(p, tileIndex);
         if (!ownsWholeGroup(p.id(), tile.group())) {
             throw new GameException("Сначала соберите все улицы этого цвета");
+        }
+        if (board.streetsOf(tile.group()).stream().anyMatch(t -> mortgaged.contains(t.index()))) {
+            throw new GameException("Сначала выкупите заложенные улицы этого цвета");
         }
         int level = level(tileIndex);
         if (level == HOTEL) {
@@ -212,7 +219,7 @@ public class Game {
     }
 
     public void sellHouse(String playerId, int tileIndex) {
-        Player p = requireBuildingTime(playerId);
+        Player p = requireManagementTime(playerId);
         Tile tile = requireOwnStreet(p, tileIndex);
         int level = level(tileIndex);
         if (level == 0) {
@@ -263,13 +270,11 @@ public class Game {
             case PROPERTY, RAILROAD, UTILITY -> {
                 String ownerId = owners.get(tile.index());
                 if (ownerId == null) {
-                    if (p.money() >= tile.price()) {
-                        phase = TurnPhase.AWAITING_BUY_DECISION;
-                        return; // ждём решения игрока
-                    }
-                    log("Недостаточно денег у " + p.name() + " на " + tile.name());
-                    startAuction(tile);
+                    // Даже если денег не хватает, игрок может заложить имущество и купить — или отказаться (аукцион)
+                    phase = TurnPhase.AWAITING_BUY_DECISION;
                     return;
+                } else if (!ownerId.equals(p.id()) && mortgaged.contains(tile.index())) {
+                    log(tile.name() + " заложена — аренда не платится");
                 } else if (!ownerId.equals(p.id())) {
                     Player owner = player(ownerId);
                     int rent = switch (rentMode) {
@@ -499,18 +504,89 @@ public class Game {
         return board.streetsOf(group).stream().mapToInt(t -> level(t.index())).max().orElse(0);
     }
 
-    /** Строить и продавать можно в свой ход — до броска или перед завершением хода. */
-    private Player requireBuildingTime(String playerId) {
+    /** Строить, продавать и закладывать можно в свой ход, кроме аукциона. */
+    private Player requireManagementTime(String playerId) {
         if (phase == TurnPhase.GAME_OVER) {
             throw new GameException("Игра окончена");
         }
         if (!current().id().equals(playerId)) {
             throw new GameException("Сейчас не ваш ход");
         }
-        if (phase != TurnPhase.WAITING_FOR_ROLL && phase != TurnPhase.TURN_END) {
-            throw new GameException("Строить можно до броска кубиков или перед завершением хода");
+        if (phase == TurnPhase.AUCTION) {
+            throw new GameException("Во время аукциона нельзя управлять имуществом");
         }
         return current();
+    }
+
+    public void mortgage(String playerId, int tileIndex) {
+        Player p = requireManagementTime(playerId);
+        Tile tile = requireOwnOwnable(p, tileIndex);
+        if (mortgaged.contains(tileIndex)) {
+            throw new GameException(tile.name() + " уже заложена");
+        }
+        if (tile.group() != null && maxLevel(tile.group()) > 0) {
+            throw new GameException("Сначала продайте все постройки на улицах этого цвета");
+        }
+        mortgaged.add(tileIndex);
+        p.addMoney(mortgageValue(tile));
+        log(p.name() + " закладывает " + tile.name() + " за $" + mortgageValue(tile));
+    }
+
+    public void unmortgage(String playerId, int tileIndex) {
+        Player p = requireManagementTime(playerId);
+        Tile tile = requireOwnOwnable(p, tileIndex);
+        if (!mortgaged.contains(tileIndex)) {
+            throw new GameException(tile.name() + " не заложена");
+        }
+        int cost = unmortgageCost(tile);
+        if (p.money() < cost) {
+            throw new GameException("Недостаточно денег: выкуп стоит $" + cost);
+        }
+        p.addMoney(-cost);
+        mortgaged.remove(tileIndex);
+        log(p.name() + " выкупает " + tile.name() + " за $" + cost);
+    }
+
+    /** Залог — половина цены. */
+    public static int mortgageValue(Tile tile) {
+        return tile.price() / 2;
+    }
+
+    /** Выкуп — залог плюс 10%, с округлением вверх. */
+    public static int unmortgageCost(Tile tile) {
+        return (mortgageValue(tile) * 11 + 9) / 10;
+    }
+
+    private Tile requireOwnOwnable(Player p, int tileIndex) {
+        if (tileIndex < 0 || tileIndex >= Board.SIZE) {
+            throw new GameException("Нет такой клетки");
+        }
+        Tile tile = board.tile(tileIndex);
+        if (!tile.type().isOwnable()) {
+            throw new GameException("Эту клетку нельзя заложить");
+        }
+        if (!p.id().equals(owners.get(tileIndex))) {
+            throw new GameException("Это не ваше имущество");
+        }
+        return tile;
+    }
+
+    /** Закладывает незаложенное имущество игрока, пока не наберётся нужная сумма. */
+    private int mortgageUntil(Player p, int amount) {
+        int total = 0;
+        for (int i : ownedBy(p.id())) {
+            if (p.money() >= amount) {
+                break;
+            }
+            if (!mortgaged.contains(i)) {
+                mortgaged.add(i);
+                int value = mortgageValue(board.tile(i));
+                p.addMoney(value);
+                total += value;
+                log(p.name() + " закладывает " + board.tile(i).name() + " за $" + value);
+            }
+        }
+        return total;
     }
 
     private Tile requireOwnStreet(Player p, int tileIndex) {
@@ -529,7 +605,7 @@ public class Game {
 
     /**
      * Продаёт банку все постройки игрока за полцены.
-     * Используется, когда иначе нечем заплатить. TODO: дать игроку самому выбирать, что продать или заложить.
+     * Используется, когда иначе нечем заплатить.
      */
     private int sellAllBuildings(Player p) {
         int total = 0;
@@ -550,7 +626,11 @@ public class Game {
         return total;
     }
 
-    /** Перевод денег. {@code to == null} — платёж банку. Если денег не хватает — банкротство. */
+    /**
+     * Перевод денег. {@code to == null} — платёж банку.
+     * Если денег не хватает — сначала продаются постройки, потом закладывается имущество, иначе банкротство.
+     * TODO: дать игроку самому выбирать, что продать или заложить.
+     */
     private void pay(Player from, Player to, int amount) {
         if (from.money() < amount) {
             int sold = sellAllBuildings(from);
@@ -559,9 +639,15 @@ public class Game {
             }
         }
         if (from.money() < amount) {
+            mortgageUntil(from, amount);
+        }
+        if (from.money() < amount) {
             int rest = from.money();
             if (to != null) {
                 to.addMoney(rest);
+            } else {
+                // Банк забирает имущество без залога; кредитору-игроку оно переходит заложенным
+                mortgaged.removeIf(i -> from.id().equals(owners.get(i)));
             }
             owners.replaceAll((tile, owner) -> owner.equals(from.id()) && to != null ? to.id() : owner);
             owners.values().removeIf(owner -> owner.equals(from.id()));
@@ -643,6 +729,7 @@ public class Game {
     public Map<Integer, Integer> buildings() { return Map.copyOf(buildings); }
     public int housesInBank() { return housesInBank; }
     public int hotelsInBank() { return hotelsInBank; }
+    public Set<Integer> mortgaged() { return Set.copyOf(mortgaged); }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 

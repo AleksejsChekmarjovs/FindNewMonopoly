@@ -169,7 +169,7 @@ button.secondary { background: var(--tile); color: var(--ink); border-color: var
 #bid-input { width: 90px; }
 .tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
 
-#build {
+#property {
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
@@ -181,19 +181,39 @@ button.secondary { background: var(--tile); color: var(--ink); border-color: var
     max-height: 40%;
     overflow-y: auto;
 }
-.build-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.build-title { font-weight: 700; }
-#build-bank { color: var(--muted); font-size: 12px; }
-.build-row {
+.property-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.property-title { font-weight: 700; }
+#property-bank { color: var(--muted); font-size: 12px; }
+.property-row {
     display: grid;
     grid-template-columns: 12px 1fr 64px auto auto;
     align-items: center;
     gap: 6px;
 }
-.build-row .swatch { width: 12px; height: 12px; border-radius: 3px; }
-.build-row .build-level { display: flex; gap: 2px; align-items: center; height: 14px; color: var(--muted); }
-.build-row .build-level .house, .build-row .build-level .hotel { height: 12px; }
-.build-row button { padding: 3px 8px; font-size: 12px; }
+.property-row .swatch { width: 12px; height: 12px; border-radius: 3px; }
+.property-row .property-level { display: flex; gap: 2px; align-items: center; height: 14px; color: var(--muted); }
+.property-row .property-level .house, .property-row .property-level .hotel { height: 12px; }
+.property-row .build-buttons { display: flex; gap: 4px; }
+.property-row button { padding: 3px 8px; font-size: 12px; }
+.property-row.mortgaged .property-name { color: var(--muted); text-decoration: line-through; }
+
+/* заложенная клетка на поле: бледная, с плашкой «ЗАЛОГ» */
+.tile.mortgaged > :not(.tokens) { opacity: .4; }
+.tile.mortgaged::after {
+    content: "ЗАЛОГ";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-20deg);
+    padding: 0 3px;
+    font-weight: 700;
+    font-size: clamp(6px, .8vw, 10px);
+    letter-spacing: .04em;
+    color: var(--hotel);
+    border: 1.5px solid var(--hotel);
+    border-radius: 3px;
+    background: var(--tile);
+}
 
 #actions { display: flex; flex-wrap: wrap; gap: 6px; }
 #actions button { padding: 6px 10px; }
