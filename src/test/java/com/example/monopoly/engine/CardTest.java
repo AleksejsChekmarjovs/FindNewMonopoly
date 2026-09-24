@@ -244,7 +244,7 @@ class CardTest {
         dice.then(d1, d2);
         g.roll(id);
         if (g.phase() == TurnPhase.AWAITING_BUY_DECISION) {
-            g.declineBuy(id);
+            TestMoves.declineAndNobodyBids(g, id);
         }
         g.endTurn(id);
     }

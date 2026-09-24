@@ -36,6 +36,19 @@
                 <div class="card-deck"></div>
                 <div class="card-text"></div>
             </div>
+            <div id="auction" class="hidden">
+                <div id="auction-title"></div>
+                <div id="auction-bid"></div>
+                <div id="auction-bidders"></div>
+                <div id="auction-controls">
+                    <button data-step="10">+$10</button>
+                    <button data-step="50">+$50</button>
+                    <button data-step="100">+$100</button>
+                    <input id="bid-input" type="number" min="1" step="1">
+                    <button id="bid-btn">Ставка</button>
+                    <button id="pass-btn" class="secondary">Пас</button>
+                </div>
+            </div>
             <div id="actions">
                 <button data-cmd="ROLL">Бросить кубики</button>
                 <button data-cmd="BUY">Купить</button>

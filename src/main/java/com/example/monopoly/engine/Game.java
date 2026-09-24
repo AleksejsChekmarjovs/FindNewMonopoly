@@ -31,6 +31,7 @@ public class Game {
     private TurnPhase phase = TurnPhase.WAITING_FOR_ROLL;
     private DiceRoll lastRoll;
     private Card lastCard;
+    private Auction auction;
     private int doublesInRow = 0;
     private boolean extraRoll = false;
     private String winnerId;
@@ -113,9 +114,28 @@ public class Game {
 
     public void declineBuy(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.AWAITING_BUY_DECISION);
-        // TODO: по классическим правилам отказ от покупки запускает аукцион
         log(p.name() + " отказывается покупать " + board.tile(p.position()).name());
-        afterAction();
+        startAuction(board.tile(p.position()));
+    }
+
+    public void bid(String playerId, int amount) {
+        Player p = requireBidder(playerId);
+        if (amount <= auction.highestBid()) {
+            throw new GameException("Ставка должна быть больше $" + auction.highestBid());
+        }
+        if (amount > p.money()) {
+            throw new GameException("Недостаточно денег для такой ставки");
+        }
+        auction.bid(playerId, amount);
+        log(p.name() + " ставит $" + amount);
+        finishAuctionIfDone();
+    }
+
+    public void passAuction(String playerId) {
+        Player p = requireBidder(playerId);
+        auction.pass(playerId);
+        log(p.name() + " пасует");
+        finishAuctionIfDone();
     }
 
     public void payJailFine(String playerId) {
@@ -179,8 +199,9 @@ public class Game {
                         phase = TurnPhase.AWAITING_BUY_DECISION;
                         return; // ждём решения игрока
                     }
-                    // TODO: аукцион
                     log("Недостаточно денег у " + p.name() + " на " + tile.name());
+                    startAuction(tile);
+                    return;
                 } else if (!ownerId.equals(p.id())) {
                     Player owner = player(ownerId);
                     int rent = switch (rentMode) {
@@ -288,6 +309,47 @@ public class Game {
             }
         }
         throw new IllegalStateException("На поле нет клетки " + type);
+    }
+
+    /** Торги начинает игрок после текущего; сам текущий тоже участвует, он последний в круге. */
+    private void startAuction(Tile tile) {
+        List<String> bidders = new ArrayList<>();
+        for (int i = 1; i <= players.size(); i++) {
+            Player pl = players.get((currentIndex + i) % players.size());
+            if (!pl.bankrupt()) {
+                bidders.add(pl.id());
+            }
+        }
+        auction = new Auction(tile.index(), bidders);
+        phase = TurnPhase.AUCTION;
+        log("Аукцион: " + tile.name() + ". Ставку делает " + player(auction.currentBidderId()).name());
+    }
+
+    private void finishAuctionIfDone() {
+        if (!auction.finished()) {
+            return;
+        }
+        Tile tile = board.tile(auction.tileIndex());
+        if (auction.highestBidderId() == null) {
+            log("Никто не сделал ставку, " + tile.name() + " остаётся у банка");
+        } else {
+            Player winner = player(auction.highestBidderId());
+            winner.addMoney(-auction.highestBid());
+            owners.put(tile.index(), winner.id());
+            log(winner.name() + " выигрывает аукцион: " + tile.name() + " за $" + auction.highestBid());
+        }
+        auction = null;
+        afterAction();
+    }
+
+    private Player requireBidder(String playerId) {
+        if (phase != TurnPhase.AUCTION) {
+            throw new GameException("Сейчас нет аукциона");
+        }
+        if (!auction.currentBidderId().equals(playerId)) {
+            throw new GameException("Сейчас не ваша очередь торговаться");
+        }
+        return player(playerId);
     }
 
     private Deck deck(DeckType type) {
@@ -408,6 +470,7 @@ public class Game {
     public Map<Integer, String> owners() { return Map.copyOf(owners); }
     public DiceRoll lastRoll() { return lastRoll; }
     public Card lastCard() { return lastCard; }
+    public Auction auction() { return auction; }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 
