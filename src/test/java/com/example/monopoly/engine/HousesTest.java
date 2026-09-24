@@ -140,20 +140,23 @@ class HousesTest {
     }
 
     @Test
-    void onlyCurrentPlayerBuildsAndOnlyBetweenActions() {
+    void onlyCurrentPlayerBuildsAndNotDuringAuction() {
         giveAliceBrowns(game);
         game.setOwner(37, "b");
         game.setOwner(39, "b");
 
         assertThatThrownBy(() -> game.buildHouse("b", 37)).hasMessageContaining("не ваш ход");
 
-        dice.then(2, 4); // -> 6 Oriental, решение о покупке
+        dice.then(2, 4); // -> 6 Oriental, решение о покупке — строить можно
         game.roll("a");
-        assertThatThrownBy(() -> game.buildHouse("a", BALTIC)).hasMessageContaining("до броска");
+        build(game, BALTIC);
 
-        game.buy("a");
-        build(game, BALTIC); // TURN_END — можно
-        assertThat(game.buildings()).containsEntry(BALTIC, 1);
+        game.declineBuy("a"); // аукцион — нельзя
+        assertThatThrownBy(() -> game.buildHouse("a", MEDITERRANEAN)).hasMessageContaining("аукциона");
+
+        TestMoves.passAll(game);
+        build(game, MEDITERRANEAN); // TURN_END — можно
+        assertThat(game.buildings()).containsEntry(BALTIC, 1).containsEntry(MEDITERRANEAN, 1);
     }
 
     // ---------------------------------------------------------------- продажа

@@ -130,6 +130,7 @@ function renderGame(g) {
         const el = $("tile-" + t.index);
         const owner = g.owners[t.index];
         el.classList.toggle("owned", !!owner);
+        el.classList.toggle("mortgaged", g.mortgaged.includes(t.index));
         el.style.setProperty("--owner", owner ? colorOf[owner] : "transparent");
         el.querySelector(".tokens").replaceChildren();
         const slot = el.querySelector(".buildings");
@@ -213,7 +214,7 @@ function renderGame(g) {
         btn.classList.toggle("hidden", !ok);
     }
 
-    renderBuildPanel(g, myTurn);
+    renderPropertyPanel(g, myTurn);
 
     // игроки
     $("players").replaceChildren(...g.players.map((p) => {
@@ -261,55 +262,81 @@ function buildingIcons(level) {
 }
 
 /**
- * Панель строительства: улицы из собранных целиком групп текущего игрока.
+ * Панель «Моё имущество»: все клетки игрока — застройка (для собранных групп) и залог.
  * Кнопки заранее выключаются по тем же правилам, что проверяет сервер, — сервер всё равно главный.
  */
-function renderBuildPanel(g, myTurn) {
-    const canBuildNow = myTurn && (g.phase === "WAITING_FOR_ROLL" || g.phase === "TURN_END");
-    const groups = {};
-    for (const t of g.tiles.filter((t) => t.type === "PROPERTY")) {
-        (groups[t.group] ||= []).push(t);
-    }
-    const fullGroups = Object.values(groups).filter((streets) =>
-        streets.every((t) => g.owners[t.index] === me.playerId));
+function renderPropertyPanel(g, myTurn) {
+    const canManage = myTurn && ["WAITING_FOR_ROLL", "AWAITING_BUY_DECISION", "TURN_END"].includes(g.phase);
+    const mine = g.tiles.filter((t) => g.owners[t.index] === me.playerId);
 
-    $("build").classList.toggle("hidden", !canBuildNow || fullGroups.length === 0);
-    if (!canBuildNow || fullGroups.length === 0) return;
+    $("property").classList.toggle("hidden", !canManage || mine.length === 0);
+    if (!canManage || mine.length === 0) return;
 
     const money = g.players.find((p) => p.id === me.playerId).money;
+    const mortgaged = new Set(g.mortgaged);
     const levelOf = (t) => g.buildings[t.index] || 0;
-    $("build-bank").textContent = `В банке: домов ${g.housesInBank}, отелей ${g.hotelsInBank}`;
+    const groupOf = (t) => g.tiles.filter((s) => s.type === "PROPERTY" && s.group === t.group);
+    $("property-bank").textContent = `В банке: домов ${g.housesInBank}, отелей ${g.hotelsInBank}`;
 
-    const rows = [];
-    for (const streets of fullGroups) {
-        const levels = streets.map(levelOf);
-        const min = Math.min(...levels);
-        const max = Math.max(...levels);
-        for (const t of streets) {
+    const rows = mine.map((t) => {
+        const row = document.createElement("div");
+        row.className = "property-row";
+        row.classList.toggle("mortgaged", mortgaged.has(t.index));
+        row.innerHTML = `<span class="swatch"></span><span class="property-name"></span>
+            <span class="property-level"></span><span class="build-buttons"></span><span class="mortgage-slot"></span>`;
+        row.querySelector(".swatch").style.background = t.group ? `var(--${t.group.toLowerCase()})` : "var(--line)";
+        row.querySelector(".property-name").textContent = t.name;
+
+        const group = t.type === "PROPERTY" ? groupOf(t) : [];
+        const groupLevels = group.map(levelOf);
+        const groupHasBuildings = groupLevels.some((l) => l > 0);
+        const fullGroup = group.length > 0 && group.every((s) => g.owners[s.index] === me.playerId);
+
+        // застройка — только на собранных группах
+        if (fullGroup) {
             const level = levelOf(t);
             const cost = g.houseCosts[t.group];
             const noStock = level === 4 ? g.hotelsInBank === 0 : g.housesInBank === 0;
-            const row = document.createElement("div");
-            row.className = "build-row";
-            row.innerHTML = `<span class="swatch"></span><span class="build-name"></span>
-                <span class="build-level"></span>
-                <button class="plus"></button><button class="minus secondary">−</button>`;
-            row.querySelector(".swatch").style.background = `var(--${t.group.toLowerCase()})`;
-            row.querySelector(".build-name").textContent = t.name;
-            row.querySelector(".build-level").replaceChildren(
+            const groupMortgaged = group.some((s) => mortgaged.has(s.index));
+            row.querySelector(".property-level").replaceChildren(
                 ...(level ? buildingIcons(level) : [document.createTextNode("—")]));
-            const plus = row.querySelector(".plus");
+
+            const plus = document.createElement("button");
             plus.textContent = `${level === 4 ? "Отель" : "+ Дом"} $${cost}`;
-            plus.disabled = level === HOTEL || level > min || money < cost || noStock;
+            plus.disabled = level === HOTEL || level > Math.min(...groupLevels) || money < cost
+                || noStock || groupMortgaged;
+            plus.title = groupMortgaged ? "Сначала выкупите заложенные улицы этого цвета" : "";
             plus.onclick = () => send({ type: "BUILD", tileIndex: t.index });
-            const minus = row.querySelector(".minus");
+
+            const minus = document.createElement("button");
+            minus.className = "secondary";
+            minus.textContent = "−";
             minus.title = `Продать за $${cost / 2}`;
-            minus.disabled = level === 0 || level < max;
+            minus.disabled = level === 0 || level < Math.max(...groupLevels);
             minus.onclick = () => send({ type: "SELL_HOUSE", tileIndex: t.index });
-            rows.push(row);
+
+            row.querySelector(".build-buttons").append(plus, minus);
         }
-    }
-    $("build-list").replaceChildren(...rows);
+
+        // залог: половина цены, выкуп — залог + 10% с округлением вверх (как на сервере)
+        const value = t.price / 2;
+        const btn = document.createElement("button");
+        btn.className = "secondary";
+        if (mortgaged.has(t.index)) {
+            const cost = Math.ceil(value * 1.1);
+            btn.textContent = `Выкупить $${cost}`;
+            btn.disabled = money < cost;
+            btn.onclick = () => send({ type: "UNMORTGAGE", tileIndex: t.index });
+        } else {
+            btn.textContent = `Заложить $${value}`;
+            btn.disabled = groupHasBuildings;
+            btn.title = groupHasBuildings ? "Сначала продайте постройки на улицах этого цвета" : "";
+            btn.onclick = () => send({ type: "MORTGAGE", tileIndex: t.index });
+        }
+        row.querySelector(".mortgage-slot").append(btn);
+        return row;
+    });
+    $("property-list").replaceChildren(...rows);
 }
 
 // кнопки «+10/+50/+100» ставят сразу; поле ввода — для произвольной суммы

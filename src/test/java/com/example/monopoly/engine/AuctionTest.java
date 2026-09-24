@@ -139,13 +139,18 @@ class AuctionTest {
     }
 
     @Test
-    void cannotAffordStartsAuctionImmediately() {
+    void playerWhoCannotAffordStillDecidesThenAuctionStarts() {
         Player poor = new Player("p", "Poor", 50);
         Game g = newGame(poor, bob);
 
         dice.then(4, 5); // -> 9 Connecticut Ave, $120
         g.roll("p");
 
+        // Можно заложить имущество и купить — поэтому решение всё равно за игроком
+        assertThat(g.phase()).isEqualTo(TurnPhase.AWAITING_BUY_DECISION);
+        assertThatThrownBy(() -> g.buy("p")).hasMessageContaining("Недостаточно денег");
+
+        g.declineBuy("p");
         assertThat(g.phase()).isEqualTo(TurnPhase.AUCTION);
         assertThat(g.auction().tileIndex()).isEqualTo(9);
         assertThat(g.auction().currentBidderId()).isEqualTo("b");

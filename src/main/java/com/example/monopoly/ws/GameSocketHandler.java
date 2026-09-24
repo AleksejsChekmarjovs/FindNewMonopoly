@@ -100,6 +100,8 @@ public class GameSocketHandler extends TextWebSocketHandler {
             case "PASS" -> lobby.act(room, g -> g.passAuction(pid));
             case "BUILD" -> lobby.act(room, g -> g.buildHouse(pid, requireTile(msg)));
             case "SELL_HOUSE" -> lobby.act(room, g -> g.sellHouse(pid, requireTile(msg)));
+            case "MORTGAGE" -> lobby.act(room, g -> g.mortgage(pid, requireTile(msg)));
+            case "UNMORTGAGE" -> lobby.act(room, g -> g.unmortgage(pid, requireTile(msg)));
             case "END_TURN" -> lobby.act(room, g -> g.endTurn(pid));
             default -> throw new GameException("Неизвестная команда " + msg.type());
         }
