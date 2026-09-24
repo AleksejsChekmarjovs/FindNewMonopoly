@@ -16,6 +16,10 @@ public class Game {
     public static final int START_MONEY = 1500;
     public static final int GO_SALARY = 200;
     public static final int JAIL_FINE = 50;
+    /** Уровень застройки: 1–4 — дома, 5 — отель. */
+    public static final int HOTEL = 5;
+    public static final int BANK_HOUSES = 32;
+    public static final int BANK_HOTELS = 12;
     private static final int MAX_LOG = 50;
 
     private final Board board = new Board();
@@ -23,6 +27,10 @@ public class Game {
     private final List<Player> players;
     /** индекс клетки -> id владельца */
     private final Map<Integer, String> owners = new HashMap<>();
+    /** индекс улицы -> уровень застройки (нет записи — пусто) */
+    private final Map<Integer, Integer> buildings = new HashMap<>();
+    private int housesInBank = BANK_HOUSES;
+    private int hotelsInBank = BANK_HOTELS;
     private final Deque<String> log = new ArrayDeque<>();
     private final Deck chance;
     private final Deck communityChest;
@@ -169,6 +177,66 @@ public class Game {
         nextPlayer();
     }
 
+    public void buildHouse(String playerId, int tileIndex) {
+        Player p = requireBuildingTime(playerId);
+        Tile tile = requireOwnStreet(p, tileIndex);
+        if (!ownsWholeGroup(p.id(), tile.group())) {
+            throw new GameException("Сначала соберите все улицы этого цвета");
+        }
+        int level = level(tileIndex);
+        if (level == HOTEL) {
+            throw new GameException("На этой улице уже стоит отель");
+        }
+        if (level > minLevel(tile.group())) {
+            throw new GameException("Стройте равномерно: сначала добавьте дома на другие улицы этого цвета");
+        }
+        int cost = tile.group().houseCost();
+        if (p.money() < cost) {
+            throw new GameException("Недостаточно денег");
+        }
+        if (level == 4) {
+            if (hotelsInBank == 0) {
+                throw new GameException("В банке закончились отели");
+            }
+            hotelsInBank--;
+            housesInBank += 4;
+        } else {
+            if (housesInBank == 0) {
+                throw new GameException("В банке закончились дома");
+            }
+            housesInBank--;
+        }
+        p.addMoney(-cost);
+        buildings.put(tileIndex, level + 1);
+        log(p.name() + (level == 4 ? " строит отель на " : " строит дом на ") + tile.name() + " за $" + cost);
+    }
+
+    public void sellHouse(String playerId, int tileIndex) {
+        Player p = requireBuildingTime(playerId);
+        Tile tile = requireOwnStreet(p, tileIndex);
+        int level = level(tileIndex);
+        if (level == 0) {
+            throw new GameException("На этой улице нет построек");
+        }
+        if (level < maxLevel(tile.group())) {
+            throw new GameException("Продавайте равномерно: сначала продайте дома с других улиц этого цвета");
+        }
+        if (level == HOTEL) {
+            // Отель меняется обратно на 4 дома — они должны быть в банке
+            if (housesInBank < 4) {
+                throw new GameException("В банке не хватает домов, чтобы разменять отель");
+            }
+            housesInBank -= 4;
+            hotelsInBank++;
+        } else {
+            housesInBank++;
+        }
+        int refund = tile.group().houseCost() / 2;
+        p.addMoney(refund);
+        setLevel(tileIndex, level - 1);
+        log(p.name() + (level == HOTEL ? " продаёт отель на " : " продаёт дом на ") + tile.name() + " за $" + refund);
+    }
+
     // ------------------------------------------------------------------ правила
 
     private void moveBy(Player p, int steps) {
@@ -288,11 +356,19 @@ public class Game {
                 }
             }
             case REPAIRS -> {
-                // TODO: считать дома и отели игрока, когда появится застройка
                 int houses = 0;
                 int hotels = 0;
+                for (int i : ownedBy(p.id())) {
+                    int level = level(i);
+                    if (level == HOTEL) {
+                        hotels++;
+                    } else {
+                        houses += level;
+                    }
+                }
                 int cost = houses * card.amount() + hotels * card.amount2();
                 if (cost > 0) {
+                    log(p.name() + " платит за ремонт $" + cost);
                     pay(p, null, cost);
                 }
             }
@@ -360,8 +436,11 @@ public class Game {
         String ownerId = owners.get(tile.index());
         return switch (tile.type()) {
             case PROPERTY -> {
+                int level = level(tile.index());
+                if (level > 0) {
+                    yield tile.rent().get(level);
+                }
                 int base = tile.rent().get(0);
-                // TODO: дома/отели — tile.rent().get(houses)
                 yield ownsWholeGroup(ownerId, tile.group()) ? base * 2 : base;
             }
             case RAILROAD -> {
@@ -386,9 +465,99 @@ public class Game {
                 .count();
     }
 
+    /** Только для тестов: передать клетку игроку без покупки. */
+    void setOwner(int tileIndex, String playerId) {
+        owners.put(tileIndex, playerId);
+    }
+
+    private List<Integer> ownedBy(String playerId) {
+        return owners.entrySet().stream()
+                .filter(e -> e.getValue().equals(playerId))
+                .map(Map.Entry::getKey)
+                .toList();
+    }
+
+    // ------------------------------------------------------------------ застройка
+
+    private int level(int tileIndex) {
+        return buildings.getOrDefault(tileIndex, 0);
+    }
+
+    private void setLevel(int tileIndex, int level) {
+        if (level == 0) {
+            buildings.remove(tileIndex);
+        } else {
+            buildings.put(tileIndex, level);
+        }
+    }
+
+    private int minLevel(ColorGroup group) {
+        return board.streetsOf(group).stream().mapToInt(t -> level(t.index())).min().orElse(0);
+    }
+
+    private int maxLevel(ColorGroup group) {
+        return board.streetsOf(group).stream().mapToInt(t -> level(t.index())).max().orElse(0);
+    }
+
+    /** Строить и продавать можно в свой ход — до броска или перед завершением хода. */
+    private Player requireBuildingTime(String playerId) {
+        if (phase == TurnPhase.GAME_OVER) {
+            throw new GameException("Игра окончена");
+        }
+        if (!current().id().equals(playerId)) {
+            throw new GameException("Сейчас не ваш ход");
+        }
+        if (phase != TurnPhase.WAITING_FOR_ROLL && phase != TurnPhase.TURN_END) {
+            throw new GameException("Строить можно до броска кубиков или перед завершением хода");
+        }
+        return current();
+    }
+
+    private Tile requireOwnStreet(Player p, int tileIndex) {
+        if (tileIndex < 0 || tileIndex >= Board.SIZE) {
+            throw new GameException("Нет такой клетки");
+        }
+        Tile tile = board.tile(tileIndex);
+        if (tile.type() != TileType.PROPERTY) {
+            throw new GameException("Строить можно только на улицах");
+        }
+        if (!p.id().equals(owners.get(tileIndex))) {
+            throw new GameException("Это не ваша улица");
+        }
+        return tile;
+    }
+
+    /**
+     * Продаёт банку все постройки игрока за полцены.
+     * Используется, когда иначе нечем заплатить. TODO: дать игроку самому выбирать, что продать или заложить.
+     */
+    private int sellAllBuildings(Player p) {
+        int total = 0;
+        for (int i : ownedBy(p.id())) {
+            int level = level(i);
+            if (level == 0) {
+                continue;
+            }
+            if (level == HOTEL) {
+                hotelsInBank++;
+            } else {
+                housesInBank += level;
+            }
+            total += level * board.tile(i).group().houseCost() / 2;
+            setLevel(i, 0);
+        }
+        p.addMoney(total);
+        return total;
+    }
+
     /** Перевод денег. {@code to == null} — платёж банку. Если денег не хватает — банкротство. */
     private void pay(Player from, Player to, int amount) {
-        // TODO: вместо мгновенного банкротства дать игроку заложить/продать имущество
+        if (from.money() < amount) {
+            int sold = sellAllBuildings(from);
+            if (sold > 0) {
+                log(from.name() + " продаёт все постройки за $" + sold + ", чтобы расплатиться");
+            }
+        }
         if (from.money() < amount) {
             int rest = from.money();
             if (to != null) {
@@ -471,6 +640,9 @@ public class Game {
     public DiceRoll lastRoll() { return lastRoll; }
     public Card lastCard() { return lastCard; }
     public Auction auction() { return auction; }
+    public Map<Integer, Integer> buildings() { return Map.copyOf(buildings); }
+    public int housesInBank() { return housesInBank; }
+    public int hotelsInBank() { return hotelsInBank; }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 
