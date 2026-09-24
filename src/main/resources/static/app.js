@@ -93,6 +93,9 @@ function buildBoard(tiles) {
             const band = document.createElement("div");
             band.className = "band";
             band.style.background = `var(--${t.group.toLowerCase()})`;
+            const buildings = document.createElement("div");
+            buildings.className = "buildings";
+            band.append(buildings);
             el.append(band);
         }
         const name = document.createElement("div");
@@ -129,6 +132,8 @@ function renderGame(g) {
         el.classList.toggle("owned", !!owner);
         el.style.setProperty("--owner", owner ? colorOf[owner] : "transparent");
         el.querySelector(".tokens").replaceChildren();
+        const slot = el.querySelector(".buildings");
+        if (slot) slot.replaceChildren(...buildingIcons(g.buildings[t.index] || 0));
     }
     for (const p of g.players) {
         if (p.bankrupt) continue;
@@ -208,6 +213,8 @@ function renderGame(g) {
         btn.classList.toggle("hidden", !ok);
     }
 
+    renderBuildPanel(g, myTurn);
+
     // игроки
     $("players").replaceChildren(...g.players.map((p) => {
         const tr = document.createElement("tr");
@@ -231,6 +238,78 @@ function renderGame(g) {
 
 for (const btn of document.querySelectorAll("#actions button")) {
     btn.onclick = () => send({ type: btn.dataset.cmd });
+}
+
+// ---------------------------------------------------------------- застройка
+
+const HOTEL = 5;
+
+/** Значки на цветной полосе клетки: 1–4 зелёных дома или один красный отель. */
+function buildingIcons(level) {
+    if (level === HOTEL) {
+        const hotel = document.createElement("span");
+        hotel.className = "hotel";
+        hotel.title = "Отель";
+        return [hotel];
+    }
+    return Array.from({ length: level }, () => {
+        const house = document.createElement("span");
+        house.className = "house";
+        house.title = "Дом";
+        return house;
+    });
+}
+
+/**
+ * Панель строительства: улицы из собранных целиком групп текущего игрока.
+ * Кнопки заранее выключаются по тем же правилам, что проверяет сервер, — сервер всё равно главный.
+ */
+function renderBuildPanel(g, myTurn) {
+    const canBuildNow = myTurn && (g.phase === "WAITING_FOR_ROLL" || g.phase === "TURN_END");
+    const groups = {};
+    for (const t of g.tiles.filter((t) => t.type === "PROPERTY")) {
+        (groups[t.group] ||= []).push(t);
+    }
+    const fullGroups = Object.values(groups).filter((streets) =>
+        streets.every((t) => g.owners[t.index] === me.playerId));
+
+    $("build").classList.toggle("hidden", !canBuildNow || fullGroups.length === 0);
+    if (!canBuildNow || fullGroups.length === 0) return;
+
+    const money = g.players.find((p) => p.id === me.playerId).money;
+    const levelOf = (t) => g.buildings[t.index] || 0;
+    $("build-bank").textContent = `В банке: домов ${g.housesInBank}, отелей ${g.hotelsInBank}`;
+
+    const rows = [];
+    for (const streets of fullGroups) {
+        const levels = streets.map(levelOf);
+        const min = Math.min(...levels);
+        const max = Math.max(...levels);
+        for (const t of streets) {
+            const level = levelOf(t);
+            const cost = g.houseCosts[t.group];
+            const noStock = level === 4 ? g.hotelsInBank === 0 : g.housesInBank === 0;
+            const row = document.createElement("div");
+            row.className = "build-row";
+            row.innerHTML = `<span class="swatch"></span><span class="build-name"></span>
+                <span class="build-level"></span>
+                <button class="plus"></button><button class="minus secondary">−</button>`;
+            row.querySelector(".swatch").style.background = `var(--${t.group.toLowerCase()})`;
+            row.querySelector(".build-name").textContent = t.name;
+            row.querySelector(".build-level").replaceChildren(
+                ...(level ? buildingIcons(level) : [document.createTextNode("—")]));
+            const plus = row.querySelector(".plus");
+            plus.textContent = `${level === 4 ? "Отель" : "+ Дом"} $${cost}`;
+            plus.disabled = level === HOTEL || level > min || money < cost || noStock;
+            plus.onclick = () => send({ type: "BUILD", tileIndex: t.index });
+            const minus = row.querySelector(".minus");
+            minus.title = `Продать за $${cost / 2}`;
+            minus.disabled = level === 0 || level < max;
+            minus.onclick = () => send({ type: "SELL_HOUSE", tileIndex: t.index });
+            rows.push(row);
+        }
+    }
+    $("build-list").replaceChildren(...rows);
 }
 
 // кнопки «+10/+50/+100» ставят сразу; поле ввода — для произвольной суммы

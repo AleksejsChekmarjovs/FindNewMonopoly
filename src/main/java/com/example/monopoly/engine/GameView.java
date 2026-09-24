@@ -1,13 +1,19 @@
 package com.example.monopoly.engine;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Снимок состояния игры, который целиком отправляется клиентам. */
 public record GameView(
         List<Tile> tiles,
         List<PlayerView> players,
         Map<Integer, String> owners,
+        Map<Integer, Integer> buildings,
+        int housesInBank,
+        int hotelsInBank,
+        Map<ColorGroup, Integer> houseCosts,
         String currentPlayerId,
         TurnPhase phase,
         DiceRoll lastRoll,
@@ -28,6 +34,9 @@ public record GameView(
                               String currentBidderId, List<String> bidders) {
     }
 
+    private static final Map<ColorGroup, Integer> HOUSE_COSTS = Arrays.stream(ColorGroup.values())
+            .collect(Collectors.toMap(g -> g, ColorGroup::houseCost));
+
     public static GameView of(Game game) {
         Card card = game.lastCard();
         Auction a = game.auction();
@@ -38,6 +47,10 @@ public record GameView(
                                 p.jailFreeCards(), p.bankrupt()))
                         .toList(),
                 game.owners(),
+                game.buildings(),
+                game.housesInBank(),
+                game.hotelsInBank(),
+                HOUSE_COSTS,
                 game.current().id(),
                 game.phase(),
                 game.lastRoll(),

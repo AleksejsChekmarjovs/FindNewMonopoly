@@ -16,6 +16,9 @@
     --yellow: #f2d224;
     --green: #1f9e55;
     --dark_blue: #1e4fa3;
+
+    --house: #2e9d4f;
+    --hotel: #c62828;
 }
 
 * { box-sizing: border-box; }
@@ -87,6 +90,29 @@ button.secondary { background: var(--tile); color: var(--ink); border-color: var
     text-align: center;
 }
 .tile .band { width: 100%; height: 18%; flex: none; }
+
+/* ---- постройки ---- */
+.buildings {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+}
+.house, .hotel {
+    display: inline-block;
+    height: 70%;
+    max-height: 12px;
+    min-height: 6px;
+    aspect-ratio: 1;
+    background: var(--house);
+    border: 1px solid #fff;
+    border-radius: 2px;
+}
+.hotel {
+    aspect-ratio: 2.2;
+    background: var(--hotel);
+}
 .tile .name { flex: 1; display: flex; align-items: center; }
 .tile .price { color: var(--muted); }
 .tile.owned { box-shadow: inset 0 0 0 3px var(--owner); }
@@ -142,6 +168,32 @@ button.secondary { background: var(--tile); color: var(--ink); border-color: var
 #auction-controls button, #auction-controls input { padding: 6px 10px; }
 #bid-input { width: 90px; }
 .tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
+
+#build {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--tile);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: none;
+    max-height: 40%;
+    overflow-y: auto;
+}
+.build-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.build-title { font-weight: 700; }
+#build-bank { color: var(--muted); font-size: 12px; }
+.build-row {
+    display: grid;
+    grid-template-columns: 12px 1fr 64px auto auto;
+    align-items: center;
+    gap: 6px;
+}
+.build-row .swatch { width: 12px; height: 12px; border-radius: 3px; }
+.build-row .build-level { display: flex; gap: 2px; align-items: center; height: 14px; color: var(--muted); }
+.build-row .build-level .house, .build-row .build-level .hotel { height: 12px; }
+.build-row button { padding: 3px 8px; font-size: 12px; }
 
 #actions { display: flex; flex-wrap: wrap; gap: 6px; }
 #actions button { padding: 6px 10px; }
