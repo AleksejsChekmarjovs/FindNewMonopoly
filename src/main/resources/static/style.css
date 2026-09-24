@@ -59,6 +59,7 @@ button {
     cursor: pointer;
 }
 button:disabled { opacity: .35; cursor: default; }
+button.secondary { background: var(--tile); color: var(--ink); border-color: var(--line); }
 
 /* ---- поле 11x11 ---- */
 #board {
@@ -125,6 +126,22 @@ button:disabled { opacity: .35; cursor: default; }
     letter-spacing: .04em;
     color: var(--card-color);
 }
+
+#auction {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 2px solid var(--accent);
+    background: var(--tile);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+#auction-title { font-weight: 700; }
+#auction-bidders { color: var(--muted); font-size: 12px; }
+#auction-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+#auction-controls button, #auction-controls input { padding: 6px 10px; }
+#bid-input { width: 90px; }
+.tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
 
 #actions { display: flex; flex-wrap: wrap; gap: 6px; }
 #actions button { padding: 6px 10px; }

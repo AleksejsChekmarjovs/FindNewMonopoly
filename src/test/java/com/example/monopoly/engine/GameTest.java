@@ -39,7 +39,7 @@ class GameTest {
     void decliningLeavesStreetUnowned() {
         dice.then(1, 2);
         game.roll("a");
-        game.declineBuy("a");
+        TestMoves.declineAndNobodyBids(game, "a");
 
         assertThat(game.owners()).doesNotContainKey(3);
         assertThat(alice.money()).isEqualTo(1500);
@@ -155,7 +155,7 @@ class GameTest {
         dice.then(1, 1).then(2, 2).then(3, 3);
         game.roll("a"); // 2 Казна
         game.roll("a"); // 6 Oriental
-        game.declineBuy("a");
+        TestMoves.declineAndNobodyBids(game, "a");
         game.roll("a"); // третий дубль
 
         assertThat(alice.inJail()).isTrue();
@@ -196,7 +196,7 @@ class GameTest {
 
         dice.then(3, 3);
         game.roll("a"); // -> 16 St. James
-        game.declineBuy("a");
+        TestMoves.declineAndNobodyBids(game, "a");
 
         assertThat(alice.inJail()).isFalse();
         assertThat(alice.position()).isEqualTo(16);
@@ -250,7 +250,7 @@ class GameTest {
         dice.then(d1, d2);
         game.roll(id);
         if (game.phase() == TurnPhase.AWAITING_BUY_DECISION) {
-            game.declineBuy(id);
+            TestMoves.declineAndNobodyBids(game, id);
         }
         game.endTurn(id);
     }
@@ -259,7 +259,7 @@ class GameTest {
         dice.then(1, 1).then(2, 2).then(3, 3);
         game.roll("a");
         game.roll("a");
-        game.declineBuy("a");
+        TestMoves.declineAndNobodyBids(game, "a");
         game.roll("a");
         game.endTurn("a");
         playBobTurn(1, 3);

@@ -47,7 +47,7 @@ public class GameSocketHandler extends TextWebSocketHandler {
             switch (msg.type()) {
                 case "CREATE" -> enter(raw, lobby.create(), msg.name());
                 case "JOIN" -> enter(raw, lobby.room(msg.roomId()), msg.name());
-                default -> handleInRoom(raw, msg.type());
+                default -> handleInRoom(raw, msg);
             }
         } catch (GameException e) {
             send(sessionFor(raw), Map.of("type", "ERROR", "message", e.getMessage()));
@@ -77,22 +77,29 @@ public class GameSocketHandler extends TextWebSocketHandler {
         broadcast(room);
     }
 
-    private void handleInRoom(WebSocketSession raw, String type) {
+    private void handleInRoom(WebSocketSession raw, ClientMessage msg) {
         Connection c = connections.get(raw.getId());
         if (c == null) {
             throw new GameException("Сначала создайте комнату или войдите в неё");
         }
         Room room = lobby.room(c.roomId());
         String pid = c.playerId();
-        switch (type) {
+        switch (msg.type()) {
             case "START" -> lobby.start(room, pid);
             case "ROLL" -> lobby.act(room, g -> g.roll(pid));
             case "BUY" -> lobby.act(room, g -> g.buy(pid));
             case "DECLINE" -> lobby.act(room, g -> g.declineBuy(pid));
             case "PAY_JAIL_FINE" -> lobby.act(room, g -> g.payJailFine(pid));
             case "USE_JAIL_CARD" -> lobby.act(room, g -> g.useJailFreeCard(pid));
+            case "BID" -> {
+                if (msg.amount() == null) {
+                    throw new GameException("Укажите сумму ставки");
+                }
+                lobby.act(room, g -> g.bid(pid, msg.amount()));
+            }
+            case "PASS" -> lobby.act(room, g -> g.passAuction(pid));
             case "END_TURN" -> lobby.act(room, g -> g.endTurn(pid));
-            default -> throw new GameException("Неизвестная команда " + type);
+            default -> throw new GameException("Неизвестная команда " + msg.type());
         }
         broadcast(room);
     }

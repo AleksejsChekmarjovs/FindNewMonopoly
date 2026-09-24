@@ -142,9 +142,13 @@ function renderGame(g) {
     // статус и кубики
     const current = g.players.find((p) => p.id === g.currentPlayerId);
     const myTurn = g.currentPlayerId === me.playerId;
+    const nameOf = (id) => g.players.find((p) => p.id === id)?.name;
     if (g.phase === "GAME_OVER") {
-        const winner = g.players.find((p) => p.id === g.winnerId);
-        $("status").textContent = `Игра окончена. Победил ${winner?.name}`;
+        $("status").textContent = `Игра окончена. Победил ${nameOf(g.winnerId)}`;
+    } else if (g.phase === "AUCTION") {
+        $("status").textContent = g.auction.currentBidderId === me.playerId
+            ? "Аукцион: ваша очередь"
+            : `Аукцион: торгуется ${nameOf(g.auction.currentBidderId)}`;
     } else {
         $("status").textContent = myTurn ? "Ваш ход" : `Ходит ${current.name}`;
     }
@@ -158,6 +162,35 @@ function renderGame(g) {
         card.querySelector(".card-deck").textContent =
             g.lastCard.deck === "CHANCE" ? "Шанс" : "Общественная казна";
         card.querySelector(".card-text").textContent = g.lastCard.text;
+    }
+
+    // аукцион
+    const a = g.auction;
+    $("auction").classList.toggle("hidden", !a);
+    for (const t of g.tiles) {
+        $("tile-" + t.index).classList.toggle("auctioned", !!a && a.tileIndex === t.index);
+    }
+    if (a) {
+        const tile = g.tiles[a.tileIndex];
+        $("auction-title").textContent = `Аукцион: ${tile.name} (цена $${tile.price})`;
+        $("auction-bid").textContent = a.highestBidderId
+            ? `Ставка: $${a.highestBid} — ${nameOf(a.highestBidderId)}`
+            : "Ставок пока нет";
+        $("auction-bidders").textContent = "Участвуют: " + a.bidders.map(nameOf).join(", ");
+        const myBid = a.currentBidderId === me.playerId;
+        $("auction-controls").classList.toggle("hidden", !myBid);
+        if (myBid) {
+            const money = g.players.find((p) => p.id === me.playerId).money;
+            const input = $("bid-input");
+            input.min = a.highestBid + 1;
+            input.max = money;
+            if (!input.value || +input.value <= a.highestBid) input.value = Math.min(a.highestBid + 10, money);
+            for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
+                btn.disabled = a.highestBid + +btn.dataset.step > money;
+            }
+        }
+    } else {
+        $("bid-input").value = "";
     }
 
     // доступные действия
@@ -198,6 +231,17 @@ function renderGame(g) {
 
 for (const btn of document.querySelectorAll("#actions button")) {
     btn.onclick = () => send({ type: btn.dataset.cmd });
+}
+
+// кнопки «+10/+50/+100» ставят сразу; поле ввода — для произвольной суммы
+for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
+    btn.onclick = () => send({ type: "BID", amount: currentHighestBid() + +btn.dataset.step });
+}
+$("bid-btn").onclick = () => send({ type: "BID", amount: parseInt($("bid-input").value, 10) });
+$("pass-btn").onclick = () => send({ type: "PASS" });
+
+function currentHighestBid() {
+    return +$("bid-input").min - 1;
 }
 
 // ---------------------------------------------------------------- ошибки
