@@ -5,7 +5,8 @@ package com.example.monopoly.ws;
  * type: CREATE {name} | JOIN {roomId, name} | START | ROLL | BUY | DECLINE | PAY_JAIL_FINE | USE_JAIL_CARD
  *       | BID {amount} | PASS
  *       | BUILD {tileIndex} | SELL_HOUSE {tileIndex}
- *       | MORTGAGE {tileIndex} | UNMORTGAGE {tileIndex} | END_TURN
+ *       | MORTGAGE {tileIndex} | UNMORTGAGE {tileIndex}
+ *       | PAY_DEBT | DECLARE_BANKRUPTCY | END_TURN
  */
 public record ClientMessage(String type, String name, String roomId, Integer amount, Integer tileIndex) {
 }

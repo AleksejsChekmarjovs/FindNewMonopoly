@@ -155,6 +155,10 @@ function renderGame(g) {
         $("status").textContent = g.auction.currentBidderId === me.playerId
             ? "Аукцион: ваша очередь"
             : `Аукцион: торгуется ${nameOf(g.auction.currentBidderId)}`;
+    } else if (g.phase === "PAYING_DEBT") {
+        $("status").textContent = g.debt.debtorId === me.playerId
+            ? "Вам не хватает денег — расплатитесь с долгом"
+            : `${nameOf(g.debt.debtorId)} расплачивается с долгом`;
     } else {
         $("status").textContent = myTurn ? "Ваш ход" : `Ходит ${current.name}`;
     }
@@ -169,6 +173,8 @@ function renderGame(g) {
             g.lastCard.deck === "CHANCE" ? "Шанс" : "Общественная казна";
         card.querySelector(".card-text").textContent = g.lastCard.text;
     }
+
+    renderDebt(g, nameOf);
 
     // аукцион
     const a = g.auction;
@@ -261,12 +267,44 @@ function buildingIcons(level) {
     });
 }
 
+/** Панель долга: видна всем, кнопки — только должнику. */
+function renderDebt(g, nameOf) {
+    const d = g.debt;
+    $("debt").classList.toggle("hidden", g.phase !== "PAYING_DEBT" || !d);
+    if (g.phase !== "PAYING_DEBT" || !d) return;
+
+    const debtor = g.players.find((p) => p.id === d.debtorId);
+    const toWhom = d.creditorId ? `игроку ${nameOf(d.creditorId)}` : "банку";
+    const mine = d.debtorId === me.playerId;
+    $("debt-text").textContent = mine
+        ? `Вы должны $${d.amount} ${toWhom}.`
+        : `${debtor.name} должен $${d.amount} ${toWhom}.`;
+    const missing = d.amount - debtor.money;
+    $("debt-hint").textContent = missing > 0
+        ? `Не хватает $${missing}` + (mine ? ": продайте дома или заложите имущество в панели ниже." : ".")
+        : (mine ? "Денег достаточно — можно платить." : "Денег достаточно.");
+
+    $("debt-controls").classList.toggle("hidden", !mine);
+    $("pay-debt-btn").textContent = `Заплатить $${d.amount}`;
+    $("pay-debt-btn").disabled = missing > 0;
+}
+
+$("pay-debt-btn").onclick = () => send({ type: "PAY_DEBT" });
+$("bankrupt-btn").onclick = () => {
+    if (confirm("Объявить банкротство? Всё имущество уйдёт кредитору, вы выбываете из игры.")) {
+        send({ type: "DECLARE_BANKRUPTCY" });
+    }
+};
+
 /**
  * Панель «Моё имущество»: все клетки игрока — застройка (для собранных групп) и залог.
  * Кнопки заранее выключаются по тем же правилам, что проверяет сервер, — сервер всё равно главный.
  */
 function renderPropertyPanel(g, myTurn) {
-    const canManage = myTurn && ["WAITING_FOR_ROLL", "AWAITING_BUY_DECISION", "TURN_END"].includes(g.phase);
+    // во время долга должник может только собирать деньги: продавать дома и закладывать
+    const inDebt = g.phase === "PAYING_DEBT" && g.debt.debtorId === me.playerId;
+    const canManage = inDebt
+        || (myTurn && ["WAITING_FOR_ROLL", "AWAITING_BUY_DECISION", "TURN_END"].includes(g.phase));
     const mine = g.tiles.filter((t) => g.owners[t.index] === me.playerId);
 
     $("property").classList.toggle("hidden", !canManage || mine.length === 0);
@@ -304,7 +342,7 @@ function renderPropertyPanel(g, myTurn) {
             const plus = document.createElement("button");
             plus.textContent = `${level === 4 ? "Отель" : "+ Дом"} $${cost}`;
             plus.disabled = level === HOTEL || level > Math.min(...groupLevels) || money < cost
-                || noStock || groupMortgaged;
+                || noStock || groupMortgaged || inDebt;
             plus.title = groupMortgaged ? "Сначала выкупите заложенные улицы этого цвета" : "";
             plus.onclick = () => send({ type: "BUILD", tileIndex: t.index });
 
@@ -325,7 +363,7 @@ function renderPropertyPanel(g, myTurn) {
         if (mortgaged.has(t.index)) {
             const cost = Math.ceil(value * 1.1);
             btn.textContent = `Выкупить $${cost}`;
-            btn.disabled = money < cost;
+            btn.disabled = money < cost || inDebt;
             btn.onclick = () => send({ type: "UNMORTGAGE", tileIndex: t.index });
         } else {
             btn.textContent = `Заложить $${value}`;

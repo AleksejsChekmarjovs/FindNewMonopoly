@@ -63,6 +63,7 @@ button {
 }
 button:disabled { opacity: .35; cursor: default; }
 button.secondary { background: var(--tile); color: var(--ink); border-color: var(--line); }
+button.danger { background: var(--tile); color: var(--danger); border-color: var(--danger); }
 
 /* ---- поле 11x11 ---- */
 #board {
@@ -168,6 +169,20 @@ button.secondary { background: var(--tile); color: var(--ink); border-color: var
 #auction-controls button, #auction-controls input { padding: 6px 10px; }
 #bid-input { width: 90px; }
 .tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
+
+#debt {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 2px solid var(--danger);
+    background: var(--tile);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+#debt-text { font-weight: 700; }
+#debt-hint { color: var(--muted); font-size: 12px; }
+#debt-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+#debt-controls button { padding: 6px 10px; }
 
 #property {
     padding: 8px 10px;
