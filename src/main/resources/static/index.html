@@ -30,7 +30,10 @@
 <section id="game-screen" class="hidden">
     <div id="board">
         <div id="center">
-            <div id="status"></div>
+            <div class="status-row">
+                <div id="status"></div>
+                <div id="timer"></div>
+            </div>
             <div id="dice"></div>
             <div id="card" class="hidden">
                 <div class="card-deck"></div>
@@ -76,6 +79,7 @@
                 <button data-cmd="USE_JAIL_CARD">Использовать карточку</button>
                 <button data-cmd="END_TURN">Завершить ход</button>
                 <button id="trade-open-btn" class="secondary hidden">Обмен…</button>
+                <span id="trades-left"></span>
             </div>
             <div id="property" class="hidden">
                 <div class="property-head">

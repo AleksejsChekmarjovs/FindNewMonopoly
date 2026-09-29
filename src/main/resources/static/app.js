@@ -180,6 +180,7 @@ function renderGame(g) {
 
     renderDebt(g, nameOf);
     renderTrade(g, nameOf);
+    startTimers(g, nameOf);
 
     // аукцион
     const a = g.auction;
@@ -271,6 +272,55 @@ function buildingIcons(level) {
         return house;
     });
 }
+
+// ---------------------------------------------------------------- таймеры
+
+/**
+ * Сервер присылает, сколько осталось на момент отправки; дальше отсчитываем сами —
+ * так не важно, что часы у клиента и сервера расходятся.
+ */
+let timerState = null;
+
+function startTimers(g, nameOf) {
+    timerState = { t: g.timers, receivedAt: performance.now(), g, nameOf };
+    const left = g.timers.tradesLeft;
+    $("trades-left").textContent = $("trade-open-btn").classList.contains("hidden") ? ""
+        : `осталось предложений: ${left}`;
+    $("trade-open-btn").disabled = left === 0;
+    drawTimers();
+}
+
+function formatTime(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function drawTimers() {
+    if (!timerState) return;
+    const { t, receivedAt, g, nameOf } = timerState;
+    const el = $("timer");
+    if (g.phase === "GAME_OVER") {
+        el.textContent = "";
+        return;
+    }
+    const passed = performance.now() - receivedAt;
+    const turnLeft = t.turnClockRunning ? t.turnMillisLeft - passed : t.turnMillisLeft;
+    const who = g.currentPlayerId === me.playerId ? "Ваш ход" : `Ход ${nameOf(g.currentPlayerId)}`;
+    let text = `⏱ ${who}: ${formatTime(turnLeft)}` + (t.turnClockRunning ? "" : " (пауза)");
+    let urgent = t.turnClockRunning && turnLeft < 30_000;
+    if (t.waitMillisLeft != null) {
+        const waitLeft = t.waitMillisLeft - passed;
+        const whom = t.waitingForId === me.playerId ? "вы" : nameOf(t.waitingForId);
+        const what = g.phase === "TRADE_OFFER" ? "ответ на обмен"
+            : g.phase === "AUCTION" ? "ставка" : "расплата с долгом";
+        text += ` · ${what} (${whom}): ${formatTime(waitLeft)}`;
+        urgent = urgent || waitLeft < 10_000;
+    }
+    el.textContent = text;
+    el.classList.toggle("urgent", urgent);
+}
+
+setInterval(drawTimers, 250);
 
 // ---------------------------------------------------------------- обмен
 
