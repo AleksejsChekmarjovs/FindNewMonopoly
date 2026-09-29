@@ -12,7 +12,17 @@ import java.util.UUID;
 /** Игровая комната: лобби до старта и сама партия после. Все методы вызываются под локом комнаты. */
 public class Room {
 
-    public record Seat(String playerId, String name) {
+    /**
+     * Место игрока.
+     *
+     * @param playerId публичный id — его видят все в состоянии игры
+     * @param token секрет для возвращения в комнату после обрыва; знает только сам игрок
+     */
+    public record Seat(String playerId, String name, String token) {
+    }
+
+    /** То, что можно показывать другим игрокам: без токена. */
+    public record PublicSeat(String playerId, String name) {
     }
 
     private final String id;
@@ -30,7 +40,7 @@ public class Room {
         if (seats.size() >= 8) {
             throw new GameException("Комната заполнена");
         }
-        Seat seat = new Seat(UUID.randomUUID().toString(), name);
+        Seat seat = new Seat(UUID.randomUUID().toString(), name, UUID.randomUUID().toString());
         seats.add(seat);
         return seat;
     }
@@ -48,7 +58,16 @@ public class Room {
         game = new Game(players, Dice.random());
     }
 
+    Seat seatByToken(String token) {
+        return seats.stream()
+                .filter(s -> s.token().equals(token))
+                .findFirst()
+                .orElseThrow(() -> new GameException("Место в комнате не найдено"));
+    }
+
     public String id() { return id; }
-    public List<Seat> seats() { return List.copyOf(seats); }
+    public List<PublicSeat> publicSeats() {
+        return seats.stream().map(s -> new PublicSeat(s.playerId(), s.name())).toList();
+    }
     public Game game() { return game; }
 }

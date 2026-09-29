@@ -8,35 +8,131 @@ const $ = (id) => document.getElementById(id);
 let socket;
 let me = { playerId: null, roomId: null };
 let boardBuilt = false;
+/** Кто из игроков сейчас подключён (id). */
+let online = new Set();
+
+// ---------------------------------------------------------------- сессия
+
+/**
+ * {roomId, playerId, token} — чтобы вернуться в партию после обрыва, перезагрузки или закрытия вкладки.
+ * sessionStorage — своя у каждой вкладки (можно играть за двоих в двух вкладках),
+ * localStorage — последняя сессия браузера, если вкладку закрыли и открыли заново.
+ */
+const SESSION_KEY = "monopoly.session";
+
+function saveSession(s) {
+    const value = JSON.stringify(s);
+    try { sessionStorage.setItem(SESSION_KEY, value); } catch { /* приватный режим и т.п. */ }
+    try { localStorage.setItem(SESSION_KEY, value); } catch { /* */ }
+}
+
+function loadSession() {
+    for (const storage of [() => sessionStorage, () => localStorage]) {
+        try {
+            const value = storage().getItem(SESSION_KEY);
+            if (value) return JSON.parse(value);
+        } catch { /* */ }
+    }
+    return null;
+}
+
+function clearSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { /* */ }
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* */ }
+}
 
 // ---------------------------------------------------------------- соединение
+
+const CLOSE_OPENED_ELSEWHERE = 4000;
+let reconnectDelay = 1000;
+let reconnectTimer = null;
 
 function connect(firstMessage) {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${proto}://${location.host}/ws`);
     socket.onopen = () => send(firstMessage);
     socket.onmessage = (e) => handle(JSON.parse(e.data));
-    socket.onclose = () => showError("Соединение с сервером потеряно");
+    socket.onclose = (e) => onDisconnect(e.code);
 }
 
 function send(msg) {
-    socket.send(JSON.stringify(msg));
+    if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(msg));
+    } else {
+        showError("Нет связи с сервером");
+    }
+}
+
+/** Обрыв: если мы в партии — переподключаемся с нарастающей паузой (1, 2, 4… до 10 с). */
+function onDisconnect(code) {
+    const session = loadSession();
+    if (code === CLOSE_OPENED_ELSEWHERE) {
+        showBanner("Игра открыта в другой вкладке или окне. Обновите страницу, чтобы вернуться сюда.");
+        return;
+    }
+    if (!session) {
+        showError("Соединение с сервером потеряно");
+        return;
+    }
+    showBanner("Связь потеряна — переподключаемся…");
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => resume(session), reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 10_000);
+}
+
+function resume(session) {
+    connect({ type: "RESUME", roomId: session.roomId, token: session.token });
 }
 
 function handle(msg) {
     switch (msg.type) {
         case "WELCOME":
             me = { playerId: msg.playerId, roomId: msg.roomId };
+            saveSession({ roomId: msg.roomId, playerId: msg.playerId, token: msg.token });
+            reconnectDelay = 1000;
+            hideBanner();
+            break;
+        case "RESUME_FAILED":
+            clearSession();
+            hideBanner();
+            showScreen("lobby-screen");
+            showError(msg.message);
             break;
         case "LOBBY":
+            online = new Set(msg.online);
             renderLobby(msg);
             break;
         case "STATE":
+            online = new Set(msg.online);
             renderGame(msg.game);
             break;
         case "ERROR":
             showError(msg.message);
             break;
+    }
+}
+
+function showScreen(id) {
+    for (const s of ["lobby-screen", "waiting-screen", "game-screen"]) {
+        $(s).classList.toggle("hidden", s !== id);
+    }
+}
+
+function showBanner(text) {
+    $("connection").textContent = text;
+    $("connection").classList.remove("hidden");
+}
+
+function hideBanner() {
+    $("connection").classList.add("hidden");
+}
+
+// при загрузке страницы — сразу вернуться в свою партию, если она была
+{
+    const session = loadSession();
+    if (session) {
+        showBanner("Возвращаемся в партию…");
+        resume(session);
     }
 }
 
@@ -63,7 +159,8 @@ function renderLobby(msg) {
     $("room-code").textContent = msg.roomId;
     $("waiting-players").replaceChildren(...msg.players.map((p) => {
         const li = document.createElement("li");
-        li.textContent = p.name + (p.playerId === me.playerId ? " (вы)" : "");
+        li.textContent = p.name + (p.playerId === me.playerId ? " (вы)" : "")
+            + (online.has(p.playerId) ? "" : " — не в сети");
         return li;
     }));
     const isHost = msg.players[0]?.playerId === me.playerId;
@@ -234,7 +331,11 @@ function renderGame(g) {
         tr.classList.toggle("current", p.id === g.currentPlayerId);
         tr.classList.toggle("bankrupt", p.bankrupt);
         const dot = `<span class="token" style="display:inline-block;background:${colorOf[p.id]}"></span>`;
-        const notes = [p.inJail ? "в тюрьме" : "", p.jailFreeCards ? `🔑×${p.jailFreeCards}` : ""].filter(Boolean).join(" ");
+        const notes = [
+            p.inJail ? "в тюрьме" : "",
+            p.jailFreeCards ? `🔑×${p.jailFreeCards}` : "",
+            !p.bankrupt && !online.has(p.id) ? "не в сети" : "",
+        ].filter(Boolean).join(" ");
         tr.innerHTML = `<td>${dot}</td><td></td><td>$${p.money}</td><td>${notes}</td>`;
         tr.children[1].textContent = p.name + (p.id === me.playerId ? " (вы)" : "");
         return tr;

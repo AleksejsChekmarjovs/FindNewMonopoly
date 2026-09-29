@@ -45,6 +45,15 @@ public class LobbyService {
         }
     }
 
+    public Room.Seat resume(Room room, String token) {
+        if (token == null || token.isBlank()) {
+            throw new GameException("Нет токена");
+        }
+        synchronized (room) {
+            return room.seatByToken(token);
+        }
+    }
+
     public void start(Room room, String playerId) {
         synchronized (room) {
             room.start(playerId);
