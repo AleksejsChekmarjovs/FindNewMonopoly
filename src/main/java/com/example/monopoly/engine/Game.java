@@ -442,6 +442,167 @@ public class Game {
         return type == DeckType.CHANCE ? chance : communityChest;
     }
 
+    // ------------------------------------------------------------------ обмен
+
+    private TradeOffer trade;
+    private TurnPhase phaseBeforeTrade;
+
+    /** Предложить обмен может текущий игрок в свой ход — до броска или перед завершением хода. */
+    public void proposeTrade(TradeOffer offer) {
+        Player from = player(offer.fromId());
+        if (phase == TurnPhase.GAME_OVER) {
+            throw new GameException("Игра окончена");
+        }
+        if (!current().id().equals(from.id())) {
+            throw new GameException("Предлагать обмен можно только в свой ход");
+        }
+        if (phase != TurnPhase.WAITING_FOR_ROLL && phase != TurnPhase.TURN_END) {
+            throw new GameException("Предлагать обмен можно до броска кубиков или перед завершением хода");
+        }
+        validateTrade(offer);
+        trade = offer;
+        phaseBeforeTrade = phase;
+        phase = TurnPhase.TRADE_OFFER;
+        log(from.name() + " предлагает обмен игроку " + player(offer.toId()).name() + ": " + describe(offer));
+    }
+
+    public void acceptTrade(String playerId) {
+        requireTrade(playerId, true);
+        TradeOffer offer = trade;
+        validateTrade(offer); // с момента предложения всё могло измениться
+        Player from = player(offer.fromId());
+        Player to = player(offer.toId());
+
+        // Получивший заложенную клетку сразу платит банку 10% от залога
+        int fromFee = mortgageTransferFee(offer.takeTiles());
+        int toFee = mortgageTransferFee(offer.giveTiles());
+        if (from.money() - offer.giveMoney() + offer.takeMoney() < fromFee) {
+            throw new GameException(from.name() + " не хватает $" + fromFee + " на 10% за заложенные клетки");
+        }
+        if (to.money() - offer.takeMoney() + offer.giveMoney() < toFee) {
+            throw new GameException(to.name() + " не хватает $" + toFee + " на 10% за заложенные клетки");
+        }
+
+        offer.giveTiles().forEach(i -> owners.put(i, to.id()));
+        offer.takeTiles().forEach(i -> owners.put(i, from.id()));
+        transfer(from, to, offer.giveMoney());
+        transfer(to, from, offer.takeMoney());
+        for (int i = 0; i < offer.giveJailCards(); i++) {
+            to.addJailFreeCard(from.takeJailFreeCard());
+        }
+        for (int i = 0; i < offer.takeJailCards(); i++) {
+            from.addJailFreeCard(to.takeJailFreeCard());
+        }
+        transfer(from, null, fromFee);
+        transfer(to, null, toFee);
+
+        log(to.name() + " принимает обмен");
+        if (fromFee + toFee > 0) {
+            log("Проценты за заложенные клетки: " + (fromFee > 0 ? from.name() + " $" + fromFee + " " : "")
+                    + (toFee > 0 ? to.name() + " $" + toFee : ""));
+        }
+        closeTrade();
+    }
+
+    public void rejectTrade(String playerId) {
+        requireTrade(playerId, true);
+        log(player(playerId).name() + " отклоняет обмен");
+        closeTrade();
+    }
+
+    public void cancelTrade(String playerId) {
+        requireTrade(playerId, false);
+        log(player(playerId).name() + " отзывает предложение обмена");
+        closeTrade();
+    }
+
+    private void closeTrade() {
+        trade = null;
+        phase = phaseBeforeTrade;
+    }
+
+    /** @param recipient true — действие адресата (принять/отклонить), false — автора (отозвать) */
+    private void requireTrade(String playerId, boolean recipient) {
+        if (phase != TurnPhase.TRADE_OFFER) {
+            throw new GameException("Сейчас нет предложения обмена");
+        }
+        String expected = recipient ? trade.toId() : trade.fromId();
+        if (!expected.equals(playerId)) {
+            throw new GameException(recipient ? "Это предложение адресовано не вам" : "Это не ваше предложение");
+        }
+    }
+
+    private void validateTrade(TradeOffer offer) {
+        Player from = player(offer.fromId());
+        Player to = player(offer.toId());
+        if (from == to) {
+            throw new GameException("Нельзя меняться с самим собой");
+        }
+        if (to.bankrupt()) {
+            throw new GameException(to.name() + " выбыл из игры");
+        }
+        if (offer.isEmpty()) {
+            throw new GameException("Пустое предложение");
+        }
+        if (offer.giveMoney() < 0 || offer.takeMoney() < 0 || offer.giveJailCards() < 0 || offer.takeJailCards() < 0) {
+            throw new GameException("Суммы не могут быть отрицательными");
+        }
+        if (offer.giveMoney() > from.money()) {
+            throw new GameException("У " + from.name() + " нет $" + offer.giveMoney());
+        }
+        if (offer.takeMoney() > to.money()) {
+            throw new GameException("У " + to.name() + " нет $" + offer.takeMoney());
+        }
+        if (offer.giveJailCards() > from.jailFreeCards() || offer.takeJailCards() > to.jailFreeCards()) {
+            throw new GameException("Нет столько карточек «Освободиться из тюрьмы»");
+        }
+        validateTradeTiles(offer.giveTiles(), from);
+        validateTradeTiles(offer.takeTiles(), to);
+    }
+
+    private void validateTradeTiles(List<Integer> tiles, Player owner) {
+        if (tiles.stream().distinct().count() != tiles.size()) {
+            throw new GameException("Клетка указана дважды");
+        }
+        for (int i : tiles) {
+            if (i < 0 || i >= Board.SIZE || !board.tile(i).type().isOwnable()) {
+                throw new GameException("Эту клетку нельзя обменять");
+            }
+            Tile tile = board.tile(i);
+            if (!owner.id().equals(owners.get(i))) {
+                throw new GameException(tile.name() + " не принадлежит игроку " + owner.name());
+            }
+            if (tile.group() != null && maxLevel(tile.group()) > 0) {
+                throw new GameException(tile.name() + ": сначала продайте постройки на улицах этого цвета");
+            }
+        }
+    }
+
+    /** 10% от залога за каждую полученную заложенную клетку (с округлением вверх, как при выкупе). */
+    private int mortgageTransferFee(List<Integer> tiles) {
+        return tiles.stream()
+                .filter(mortgaged::contains)
+                .mapToInt(i -> unmortgageCost(board.tile(i)) - mortgageValue(board.tile(i)))
+                .sum();
+    }
+
+    private String describe(TradeOffer offer) {
+        return "отдаёт " + describeSide(offer.giveTiles(), offer.giveMoney(), offer.giveJailCards())
+                + ", получает " + describeSide(offer.takeTiles(), offer.takeMoney(), offer.takeJailCards());
+    }
+
+    private String describeSide(List<Integer> tiles, int money, int jailCards) {
+        List<String> parts = new ArrayList<>();
+        tiles.forEach(i -> parts.add(board.tile(i).name()));
+        if (money > 0) {
+            parts.add("$" + money);
+        }
+        if (jailCards > 0) {
+            parts.add("карточек выхода из тюрьмы: " + jailCards);
+        }
+        return parts.isEmpty() ? "ничего" : String.join(", ", parts);
+    }
+
     int rentFor(Tile tile) {
         String ownerId = owners.get(tile.index());
         return switch (tile.type()) {
@@ -531,6 +692,9 @@ public class Game {
         }
         if (phase == TurnPhase.AUCTION) {
             throw new GameException("Во время аукциона нельзя управлять имуществом");
+        }
+        if (phase == TurnPhase.TRADE_OFFER) {
+            throw new GameException("Дождитесь ответа на предложение обмена");
         }
         return current();
     }
@@ -820,6 +984,8 @@ public class Game {
     public Set<Integer> mortgaged() { return Set.copyOf(mortgaged); }
     /** Долг, который сейчас нужно закрыть, или {@code null}. */
     public Debt currentDebt() { return debts.isEmpty() ? null : debts.peekFirst().debt(); }
+    /** Открытое предложение обмена или {@code null}. */
+    public TradeOffer trade() { return trade; }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 

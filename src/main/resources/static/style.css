@@ -170,6 +170,69 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 #bid-input { width: 90px; }
 .tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
 
+#trade-offer {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 2px solid var(--dark_blue);
+    background: var(--tile);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+#trade-offer-title { font-weight: 700; }
+#trade-offer-note { color: var(--muted); font-size: 12px; }
+#trade-offer-note:empty { display: none; }
+#trade-offer-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+#trade-offer-controls button { padding: 6px 10px; }
+
+/* ---- окно обмена ---- */
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgb(0 0 0 / .35);
+}
+.modal-box {
+    width: min(640px, 100%);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--tile);
+    border: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.modal-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.modal-head h3 { margin: 0; }
+.modal-head select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); }
+.trade-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.trade-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.trade-col h4 { margin: 0; }
+.trade-tiles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+    color: var(--muted);
+}
+.trade-tile { display: flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
+.trade-tile:has(input:disabled) { color: var(--muted); cursor: default; }
+.trade-tile .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.trade-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.trade-field input { width: 120px; }
+.trade-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@media (max-width: 520px) {
+    .trade-columns { grid-template-columns: 1fr; }
+}
+
 #debt {
     padding: 8px 10px;
     border-radius: 8px;

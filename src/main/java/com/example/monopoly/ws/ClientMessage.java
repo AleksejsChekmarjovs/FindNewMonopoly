@@ -6,7 +6,9 @@ package com.example.monopoly.ws;
  *       | BID {amount} | PASS
  *       | BUILD {tileIndex} | SELL_HOUSE {tileIndex}
  *       | MORTGAGE {tileIndex} | UNMORTGAGE {tileIndex}
- *       | PAY_DEBT | DECLARE_BANKRUPTCY | END_TURN
+ *       | PAY_DEBT | DECLARE_BANKRUPTCY
+ *       | PROPOSE_TRADE {trade} | ACCEPT_TRADE | REJECT_TRADE | CANCEL_TRADE | END_TURN
  */
-public record ClientMessage(String type, String name, String roomId, Integer amount, Integer tileIndex) {
+public record ClientMessage(String type, String name, String roomId, Integer amount, Integer tileIndex,
+                            TradeRequest trade) {
 }
