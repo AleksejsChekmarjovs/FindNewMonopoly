@@ -16,17 +16,24 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Один WebSocket-эндпоинт /ws. Клиент шлёт {@link ClientMessage}, сервер рассылает
  * всем в комнате полное состояние (LOBBY или STATE). Ошибки уходят только отправителю.
+ *
+ * <p>Переподключение: при входе игрок получает секретный токен (WELCOME) и после обрыва
+ * возвращается на своё место сообщением RESUME. У игрока одно активное соединение:
+ * новое закрывает старое с кодом {@link #CLOSE_OPENED_ELSEWHERE}.
  */
 @Component
 public class GameSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GameSocketHandler.class);
+    /** Соединение закрыто, потому что игрок открыл игру в другом месте — клиенту не нужно переподключаться. */
+    public static final CloseStatus CLOSE_OPENED_ELSEWHERE = new CloseStatus(4000, "Opened elsewhere");
 
     /** Кто за каким соединением сидит. */
     private record Connection(WebSocketSession session, String roomId, String playerId) {
@@ -48,6 +55,7 @@ public class GameSocketHandler extends TextWebSocketHandler {
             switch (msg.type()) {
                 case "CREATE" -> enter(raw, lobby.create(), msg.name());
                 case "JOIN" -> enter(raw, lobby.room(msg.roomId()), msg.name());
+                case "RESUME" -> resume(raw, msg.roomId(), msg.token());
                 default -> handleInRoom(raw, msg);
             }
         } catch (GameException e) {
@@ -71,11 +79,49 @@ public class GameSocketHandler extends TextWebSocketHandler {
         if (name == null || name.isBlank()) {
             throw new GameException("Укажите имя");
         }
-        Room.Seat seat = lobby.join(room, name.strip());
+        bind(raw, room, lobby.join(room, name.strip()));
+    }
+
+    /** Вернуться на своё место по токену. Неудача — RESUME_FAILED: клиент забывает сохранённую сессию. */
+    private void resume(WebSocketSession raw, String roomId, String token) {
+        if (connections.containsKey(raw.getId())) {
+            throw new GameException("Вы уже в комнате");
+        }
+        Room room;
+        Room.Seat seat;
+        try {
+            room = lobby.room(roomId);
+            seat = lobby.resume(room, token);
+        } catch (GameException e) {
+            send(raw, Map.of("type", "RESUME_FAILED", "message", "Партия не найдена — возможно, она уже закончилась"));
+            return;
+        }
+        bind(raw, room, seat);
+    }
+
+    /** Привязать соединение к месту; прежнее соединение этого игрока закрывается. */
+    private void bind(WebSocketSession raw, Room room, Room.Seat seat) {
+        connections.entrySet().removeIf(e -> {
+            Connection old = e.getValue();
+            boolean same = old.roomId().equals(room.id()) && old.playerId().equals(seat.playerId());
+            if (same) {
+                closeQuietly(old.session(), CLOSE_OPENED_ELSEWHERE);
+            }
+            return same;
+        });
         WebSocketSession session = new ConcurrentWebSocketSessionDecorator(raw, 5000, 64 * 1024);
         connections.put(raw.getId(), new Connection(session, room.id(), seat.playerId()));
-        send(session, Map.of("type", "WELCOME", "roomId", room.id(), "playerId", seat.playerId()));
+        send(session, Map.of("type", "WELCOME", "roomId", room.id(),
+                "playerId", seat.playerId(), "token", seat.token()));
         broadcast(room);
+    }
+
+    private void closeQuietly(WebSocketSession session, CloseStatus status) {
+        try {
+            session.close(status);
+        } catch (Exception e) {
+            log.debug("Close failed for {}", session.getId(), e);
+        }
     }
 
     private void handleInRoom(WebSocketSession raw, ClientMessage msg) {
@@ -127,10 +173,17 @@ public class GameSocketHandler extends TextWebSocketHandler {
         return msg.tileIndex();
     }
 
+    /** Место в игре сохраняется: игрок может вернуться по токену. Остальным покажем, что он не в сети. */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        // TODO: переподключение игрока (сейчас после обрыва место в игре остаётся без хозяина)
-        connections.remove(session.getId());
+        Connection c = connections.remove(session.getId());
+        if (c != null) {
+            try {
+                broadcast(lobby.room(c.roomId()));
+            } catch (GameException e) {
+                log.debug("Room {} is gone", c.roomId());
+            }
+        }
     }
 
     /** Раз в секунду: сроки ходов, ответов на обмен, ставок и долгов. Изменилось — рассылаем состояние. */
@@ -148,11 +201,16 @@ public class GameSocketHandler extends TextWebSocketHandler {
     }
 
     private void broadcast(Room room) {
+        List<String> online = connections.values().stream()
+                .filter(c -> c.roomId().equals(room.id()))
+                .map(Connection::playerId)
+                .distinct()
+                .toList();
         Object payload;
         synchronized (room) {
             payload = room.game() == null
-                    ? Map.of("type", "LOBBY", "roomId", room.id(), "players", room.seats())
-                    : Map.of("type", "STATE", "game", GameView.of(room.game()));
+                    ? Map.of("type", "LOBBY", "roomId", room.id(), "players", room.publicSeats(), "online", online)
+                    : Map.of("type", "STATE", "game", GameView.of(room.game()), "online", online);
         }
         connections.values().stream()
                 .filter(c -> c.roomId().equals(room.id()))

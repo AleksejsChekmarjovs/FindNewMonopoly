@@ -317,6 +317,21 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
     font-size: 12px;
 }
 
+#connection {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    max-width: calc(100% - 32px);
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--tile);
+    font-weight: 600;
+    text-align: center;
+}
+
 #error {
     position: fixed;
     left: 50%;
