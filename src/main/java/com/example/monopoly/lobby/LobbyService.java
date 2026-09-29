@@ -4,6 +4,7 @@ import com.example.monopoly.engine.Game;
 import com.example.monopoly.engine.GameException;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -24,6 +25,10 @@ public class LobbyService {
             id = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
         } while (rooms.putIfAbsent(id, new Room(id)) != null);
         return rooms.get(id);
+    }
+
+    public Collection<Room> rooms() {
+        return rooms.values();
     }
 
     public Room room(String id) {

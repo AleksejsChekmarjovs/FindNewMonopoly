@@ -23,6 +23,7 @@ public record GameView(
         AuctionView auction,
         Debt debt,
         TradeOffer trade,
+        Game.Timers timers,
         String winnerId,
         List<String> log
 ) {
@@ -64,6 +65,7 @@ public record GameView(
                         a.currentBidderId(), a.bidders()),
                 game.currentDebt(),
                 game.trade(),
+                game.timers(),
                 game.winnerId(),
                 game.log()
         );

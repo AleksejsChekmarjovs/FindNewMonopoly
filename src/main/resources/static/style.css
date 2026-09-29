@@ -170,6 +170,11 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 #bid-input { width: 90px; }
 .tile.auctioned { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
 
+.status-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+#timer { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#timer.urgent { color: var(--danger); font-weight: 700; }
+#trades-left { align-self: center; font-size: 12px; color: var(--muted); }
+
 #trade-offer {
     padding: 8px 10px;
     border-radius: 8px;

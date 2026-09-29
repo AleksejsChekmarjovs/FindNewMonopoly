@@ -1,5 +1,8 @@
 package com.example.monopoly.engine;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -24,7 +27,18 @@ public class Game {
     public static final int BANK_HOTELS = 12;
     private static final int MAX_LOG = 50;
 
+    /** На весь ход (с повторными бросками и своим долгом). Истекло — ход доигрывается автоматически. */
+    public static final Duration TURN_TIME = Duration.ofMinutes(3);
+    /** На ответ на обмен; часы хода в это время стоят. Истекло — отказ. */
+    public static final Duration TRADE_ANSWER_TIME = Duration.ofMinutes(1);
+    /** На каждую ставку в аукционе. Истекло — пас. */
+    public static final Duration BID_TIME = Duration.ofSeconds(30);
+    /** На расплату с долгом игроку, чей сейчас не ход. Истекло — автоматическая продажа и залог. */
+    public static final Duration DEBT_TIME = Duration.ofMinutes(1);
+    public static final int MAX_TRADES_PER_TURN = 3;
+
     private final Board board = new Board();
+    private final Clock clock;
     private final Dice dice;
     private final List<Player> players;
     /** индекс клетки -> id владельца */
@@ -58,6 +72,10 @@ public class Game {
     }
 
     public Game(List<Player> players, Dice dice, Deck chance, Deck communityChest) {
+        this(players, dice, chance, communityChest, Clock.systemUTC());
+    }
+
+    public Game(List<Player> players, Dice dice, Deck chance, Deck communityChest, Clock clock) {
         if (players.size() < 2 || players.size() > 8) {
             throw new GameException("Нужно от 2 до 8 игроков");
         }
@@ -65,12 +83,41 @@ public class Game {
         this.dice = dice;
         this.chance = chance;
         this.communityChest = communityChest;
+        this.clock = clock;
+        this.turnStartedAt = clock.instant();
         log("Игра началась. Ходит " + current().name());
     }
 
-    // ------------------------------------------------------------------ команды
+    // ------------------------------------------------------------------ команды игроков
+    // Каждая команда после выполнения пересчитывает таймеры (см. updateTimers).
 
-    public void roll(String playerId) {
+    public void roll(String playerId) { command(() -> doRoll(playerId)); }
+    public void buy(String playerId) { command(() -> doBuy(playerId)); }
+    public void declineBuy(String playerId) { command(() -> doDeclineBuy(playerId)); }
+    public void bid(String playerId, int amount) { command(() -> doBid(playerId, amount)); }
+    public void passAuction(String playerId) { command(() -> doPassAuction(playerId)); }
+    public void payJailFine(String playerId) { command(() -> doPayJailFine(playerId)); }
+    public void useJailFreeCard(String playerId) { command(() -> doUseJailFreeCard(playerId)); }
+    public void endTurn(String playerId) { command(() -> doEndTurn(playerId)); }
+    public void buildHouse(String playerId, int tileIndex) { command(() -> doBuildHouse(playerId, tileIndex)); }
+    public void sellHouse(String playerId, int tileIndex) { command(() -> doSellHouse(playerId, tileIndex)); }
+    public void mortgage(String playerId, int tileIndex) { command(() -> doMortgage(playerId, tileIndex)); }
+    public void unmortgage(String playerId, int tileIndex) { command(() -> doUnmortgage(playerId, tileIndex)); }
+    public void payDebt(String playerId) { command(() -> doPayDebt(playerId)); }
+    public void declareBankruptcy(String playerId) { command(() -> doDeclareBankruptcy(playerId)); }
+    public void proposeTrade(TradeOffer offer) { command(() -> doProposeTrade(offer)); }
+    public void acceptTrade(String playerId) { command(() -> doAcceptTrade(playerId)); }
+    public void rejectTrade(String playerId) { command(() -> doRejectTrade(playerId)); }
+    public void cancelTrade(String playerId) { command(() -> doCancelTrade(playerId)); }
+
+    private void command(Runnable action) {
+        action.run();
+        updateTimers();
+    }
+
+    // ------------------------------------------------------------------ правила хода
+
+    private void doRoll(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.WAITING_FOR_ROLL);
         DiceRoll roll = dice.roll();
         lastRoll = roll;
@@ -117,7 +164,7 @@ public class Game {
         resolveLanding(p);
     }
 
-    public void buy(String playerId) {
+    private void doBuy(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.AWAITING_BUY_DECISION);
         Tile tile = board.tile(p.position());
         if (p.money() < tile.price()) {
@@ -129,13 +176,13 @@ public class Game {
         afterAction();
     }
 
-    public void declineBuy(String playerId) {
+    private void doDeclineBuy(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.AWAITING_BUY_DECISION);
         log(p.name() + " отказывается покупать " + board.tile(p.position()).name());
         startAuction(board.tile(p.position()));
     }
 
-    public void bid(String playerId, int amount) {
+    private void doBid(String playerId, int amount) {
         Player p = requireBidder(playerId);
         if (amount <= auction.highestBid()) {
             throw new GameException("Ставка должна быть больше $" + auction.highestBid());
@@ -148,14 +195,14 @@ public class Game {
         finishAuctionIfDone();
     }
 
-    public void passAuction(String playerId) {
+    private void doPassAuction(String playerId) {
         Player p = requireBidder(playerId);
         auction.pass(playerId);
         log(p.name() + " пасует");
         finishAuctionIfDone();
     }
 
-    public void payJailFine(String playerId) {
+    private void doPayJailFine(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.WAITING_FOR_ROLL);
         if (!p.inJail()) {
             throw new GameException("Вы не в тюрьме");
@@ -168,7 +215,7 @@ public class Game {
         log(p.name() + " платит $" + JAIL_FINE + " и выходит из тюрьмы");
     }
 
-    public void useJailFreeCard(String playerId) {
+    private void doUseJailFreeCard(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.WAITING_FOR_ROLL);
         if (!p.inJail()) {
             throw new GameException("Вы не в тюрьме");
@@ -181,12 +228,12 @@ public class Game {
         log(p.name() + " использует карточку и выходит из тюрьмы");
     }
 
-    public void endTurn(String playerId) {
+    private void doEndTurn(String playerId) {
         requireTurn(playerId, TurnPhase.TURN_END);
         nextPlayer();
     }
 
-    public void buildHouse(String playerId, int tileIndex) {
+    private void doBuildHouse(String playerId, int tileIndex) {
         Player p = requireManagementTime(playerId, false);
         Tile tile = requireOwnStreet(p, tileIndex);
         if (!ownsWholeGroup(p.id(), tile.group())) {
@@ -223,7 +270,7 @@ public class Game {
         log(p.name() + (level == 4 ? " строит отель на " : " строит дом на ") + tile.name() + " за $" + cost);
     }
 
-    public void sellHouse(String playerId, int tileIndex) {
+    private void doSellHouse(String playerId, int tileIndex) {
         Player p = requireManagementTime(playerId, true);
         Tile tile = requireOwnStreet(p, tileIndex);
         int level = level(tileIndex);
@@ -448,7 +495,7 @@ public class Game {
     private TurnPhase phaseBeforeTrade;
 
     /** Предложить обмен может текущий игрок в свой ход — до броска или перед завершением хода. */
-    public void proposeTrade(TradeOffer offer) {
+    private void doProposeTrade(TradeOffer offer) {
         Player from = player(offer.fromId());
         if (phase == TurnPhase.GAME_OVER) {
             throw new GameException("Игра окончена");
@@ -459,14 +506,18 @@ public class Game {
         if (phase != TurnPhase.WAITING_FOR_ROLL && phase != TurnPhase.TURN_END) {
             throw new GameException("Предлагать обмен можно до броска кубиков или перед завершением хода");
         }
+        if (tradesThisTurn >= MAX_TRADES_PER_TURN) {
+            throw new GameException("Не больше " + MAX_TRADES_PER_TURN + " предложений обмена за ход");
+        }
         validateTrade(offer);
+        tradesThisTurn++;
         trade = offer;
         phaseBeforeTrade = phase;
         phase = TurnPhase.TRADE_OFFER;
         log(from.name() + " предлагает обмен игроку " + player(offer.toId()).name() + ": " + describe(offer));
     }
 
-    public void acceptTrade(String playerId) {
+    private void doAcceptTrade(String playerId) {
         requireTrade(playerId, true);
         TradeOffer offer = trade;
         validateTrade(offer); // с момента предложения всё могло измениться
@@ -504,13 +555,13 @@ public class Game {
         closeTrade();
     }
 
-    public void rejectTrade(String playerId) {
+    private void doRejectTrade(String playerId) {
         requireTrade(playerId, true);
         log(player(playerId).name() + " отклоняет обмен");
         closeTrade();
     }
 
-    public void cancelTrade(String playerId) {
+    private void doCancelTrade(String playerId) {
         requireTrade(playerId, false);
         log(player(playerId).name() + " отзывает предложение обмена");
         closeTrade();
@@ -699,7 +750,7 @@ public class Game {
         return current();
     }
 
-    public void mortgage(String playerId, int tileIndex) {
+    private void doMortgage(String playerId, int tileIndex) {
         Player p = requireManagementTime(playerId, true);
         Tile tile = requireOwnOwnable(p, tileIndex);
         if (mortgaged.contains(tileIndex)) {
@@ -713,7 +764,7 @@ public class Game {
         log(p.name() + " закладывает " + tile.name() + " за $" + mortgageValue(tile));
     }
 
-    public void unmortgage(String playerId, int tileIndex) {
+    private void doUnmortgage(String playerId, int tileIndex) {
         Player p = requireManagementTime(playerId, false);
         Tile tile = requireOwnOwnable(p, tileIndex);
         if (!mortgaged.contains(tileIndex)) {
@@ -853,7 +904,7 @@ public class Game {
         return total;
     }
 
-    public void payDebt(String playerId) {
+    private void doPayDebt(String playerId) {
         PendingDebt pending = requireDebtor(playerId);
         Debt debt = pending.debt();
         Player p = player(playerId);
@@ -872,7 +923,7 @@ public class Game {
         }
     }
 
-    public void declareBankruptcy(String playerId) {
+    private void doDeclareBankruptcy(String playerId) {
         PendingDebt pending = requireDebtor(playerId);
         debts.removeFirst();
         String creditorId = pending.debt().creditorId();
@@ -941,6 +992,11 @@ public class Game {
     private void nextPlayer() {
         doublesInRow = 0;
         extraRoll = false;
+        // новый ход — полные 3 минуты и новый лимит обменов
+        turnRemaining = TURN_TIME;
+        turnStartedAt = clock.instant();
+        tradesThisTurn = 0;
+        autoPlayAnnounced = false;
         do {
             currentIndex = (currentIndex + 1) % players.size();
         } while (current().bankrupt());
@@ -966,6 +1022,172 @@ public class Game {
         while (log.size() > MAX_LOG) {
             log.removeFirst();
         }
+    }
+
+    // ------------------------------------------------------------------ время
+
+    /** Остаток часов хода на момент {@link #turnStartedAt}; пока часы стоят — просто остаток. */
+    private Duration turnRemaining = TURN_TIME;
+    /** Когда часы хода пошли; {@code null} — часы стоят (ждём не текущего игрока). */
+    private Instant turnStartedAt;
+    /** Чего ждём от другого игрока (обмен, ставка, долг) — и до какого момента. */
+    private WaitKey waitKey;
+    private Instant waitDeadline;
+    private int tradesThisTurn = 0;
+    private boolean autoPlayAnnounced = false;
+
+    /** Идентичность ожидания: тот же объект и та же «версия» — значит, ждём того же, срок не продлевается. */
+    private record WaitKey(Object ref, int version) {
+        boolean same(WaitKey other) {
+            return other != null && ref == other.ref && version == other.version;
+        }
+    }
+
+    /**
+     * Проверяет сроки и выполняет действия за тех, кто не успел. Хост вызывает регулярно (раз в секунду).
+     *
+     * @return true, если состояние изменилось
+     */
+    public boolean tick() {
+        boolean changed = false;
+        for (int guard = 0; guard < 200 && phase != TurnPhase.GAME_OVER; guard++) {
+            Instant now = clock.instant();
+            if (waitDeadline != null && !now.isBefore(waitDeadline)) {
+                onWaitTimeout();
+            } else if (turnStartedAt != null && turnTimeLeft(now).compareTo(Duration.ZERO) <= 0) {
+                onTurnTimeout();
+            } else {
+                break;
+            }
+            updateTimers();
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** Время хода вышло — доигрываем за текущего игрока по одному действию, пока ход не перейдёт. */
+    private void onTurnTimeout() {
+        Player p = current();
+        if (!autoPlayAnnounced) {
+            log("Время хода " + p.name() + " истекло — ход доигрывается автоматически");
+            autoPlayAnnounced = true;
+        }
+        switch (phase) {
+            case WAITING_FOR_ROLL -> doRoll(p.id());
+            case AWAITING_BUY_DECISION -> doDeclineBuy(p.id());
+            case TURN_END -> doEndTurn(p.id());
+            case PAYING_DEBT -> autoSettleDebt(p);
+            default -> throw new IllegalStateException("Часы хода не должны идти в фазе " + phase);
+        }
+    }
+
+    private void onWaitTimeout() {
+        switch (phase) {
+            case TRADE_OFFER -> {
+                log("Время на ответ истекло");
+                doRejectTrade(trade.toId());
+            }
+            case AUCTION -> {
+                log("Время на ставку истекло");
+                doPassAuction(auction.currentBidderId());
+            }
+            case PAYING_DEBT -> {
+                Player debtor = player(debts.peekFirst().debt().debtorId());
+                log("Время на расплату истекло");
+                autoSettleDebt(debtor);
+            }
+            default -> throw new IllegalStateException("Нет ожидания в фазе " + phase);
+        }
+    }
+
+    /** Расплата за игрока: продать все постройки, закладывать имущество, пока хватит, заплатить. */
+    private void autoSettleDebt(Player p) {
+        int amount = debts.peekFirst().debt().amount();
+        int sold = sellAllBuildings(p);
+        if (sold > 0) {
+            log(p.name() + " продаёт все постройки за $" + sold);
+        }
+        for (int i : ownedBy(p.id())) {
+            if (p.money() >= amount) {
+                break;
+            }
+            if (!mortgaged.contains(i)) {
+                mortgaged.add(i);
+                p.addMoney(mortgageValue(board.tile(i)));
+                log(p.name() + " закладывает " + board.tile(i).name());
+            }
+        }
+        if (p.money() >= amount) {
+            doPayDebt(p.id());
+        } else {
+            doDeclareBankruptcy(p.id());
+        }
+    }
+
+    /** Приводит часы в соответствие с тем, кого сейчас ждём. Вызывается после каждого изменения состояния. */
+    private void updateTimers() {
+        Instant now = clock.instant();
+        boolean onCurrent = waitingOnCurrentPlayer();
+        if (onCurrent && turnStartedAt == null) {
+            turnStartedAt = now;
+        } else if (!onCurrent && turnStartedAt != null) {
+            turnRemaining = turnTimeLeft(now);
+            turnStartedAt = null;
+        }
+
+        WaitKey key = sideWaitKey();
+        if (key == null) {
+            waitKey = null;
+            waitDeadline = null;
+        } else if (!key.same(waitKey)) {
+            waitKey = key;
+            waitDeadline = now.plus(switch (phase) {
+                case TRADE_OFFER -> TRADE_ANSWER_TIME;
+                case AUCTION -> BID_TIME;
+                default -> DEBT_TIME;
+            });
+        }
+    }
+
+    private boolean waitingOnCurrentPlayer() {
+        return switch (phase) {
+            case WAITING_FOR_ROLL, AWAITING_BUY_DECISION, TURN_END -> true;
+            case PAYING_DEBT -> debts.peekFirst().debt().debtorId().equals(current().id());
+            default -> false;
+        };
+    }
+
+    private WaitKey sideWaitKey() {
+        return switch (phase) {
+            case TRADE_OFFER -> new WaitKey(trade, 0);
+            case AUCTION -> new WaitKey(auction, auction.moves());
+            case PAYING_DEBT -> waitingOnCurrentPlayer() ? null : new WaitKey(debts.peekFirst(), 0);
+            default -> null;
+        };
+    }
+
+    private Duration turnTimeLeft(Instant now) {
+        Duration left = turnStartedAt == null ? turnRemaining : turnRemaining.minus(Duration.between(turnStartedAt, now));
+        return left.isNegative() ? Duration.ZERO : left;
+    }
+
+    /** Состояние часов для клиента: сколько осталось сейчас. */
+    public record Timers(long turnMillisLeft, boolean turnClockRunning,
+                         Long waitMillisLeft, String waitingForId, int tradesLeft) {
+    }
+
+    public Timers timers() {
+        Instant now = clock.instant();
+        String waitingFor = switch (phase) {
+            case TRADE_OFFER -> trade.toId();
+            case AUCTION -> auction.currentBidderId();
+            case PAYING_DEBT -> debts.peekFirst().debt().debtorId();
+            default -> current().id();
+        };
+        Long waitLeft = waitDeadline == null ? null
+                : Math.max(0, Duration.between(now, waitDeadline).toMillis());
+        return new Timers(turnTimeLeft(now).toMillis(), turnStartedAt != null, waitLeft, waitingFor,
+                MAX_TRADES_PER_TURN - tradesThisTurn);
     }
 
     // ------------------------------------------------------------------ чтение состояния

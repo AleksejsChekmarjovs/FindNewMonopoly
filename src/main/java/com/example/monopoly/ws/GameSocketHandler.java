@@ -7,6 +7,7 @@ import com.example.monopoly.lobby.Room;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -130,6 +131,20 @@ public class GameSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         // TODO: переподключение игрока (сейчас после обрыва место в игре остаётся без хозяина)
         connections.remove(session.getId());
+    }
+
+    /** Раз в секунду: сроки ходов, ответов на обмен, ставок и долгов. Изменилось — рассылаем состояние. */
+    @Scheduled(fixedRate = 1000)
+    public void tick() {
+        for (Room room : lobby.rooms()) {
+            boolean changed;
+            synchronized (room) {
+                changed = room.game() != null && room.game().tick();
+            }
+            if (changed) {
+                broadcast(room);
+            }
+        }
     }
 
     private void broadcast(Room room) {
