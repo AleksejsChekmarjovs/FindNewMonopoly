@@ -155,6 +155,10 @@ function renderGame(g) {
         $("status").textContent = g.auction.currentBidderId === me.playerId
             ? "Аукцион: ваша очередь"
             : `Аукцион: торгуется ${nameOf(g.auction.currentBidderId)}`;
+    } else if (g.phase === "TRADE_OFFER") {
+        $("status").textContent = g.trade.toId === me.playerId ? "Вам предлагают обмен"
+            : g.trade.fromId === me.playerId ? "Ждём ответа на предложение обмена"
+            : `${nameOf(g.trade.fromId)} предлагает обмен игроку ${nameOf(g.trade.toId)}`;
     } else if (g.phase === "PAYING_DEBT") {
         $("status").textContent = g.debt.debtorId === me.playerId
             ? "Вам не хватает денег — расплатитесь с долгом"
@@ -175,6 +179,7 @@ function renderGame(g) {
     }
 
     renderDebt(g, nameOf);
+    renderTrade(g, nameOf);
 
     // аукцион
     const a = g.auction;
@@ -215,7 +220,7 @@ function renderGame(g) {
         USE_JAIL_CARD: g.phase === "WAITING_FOR_ROLL" && mePlayer?.inJail && mePlayer.jailFreeCards > 0,
         END_TURN: g.phase === "TURN_END",
     };
-    for (const btn of document.querySelectorAll("#actions button")) {
+    for (const btn of document.querySelectorAll("#actions button[data-cmd]")) {
         const ok = myTurn && allowed[btn.dataset.cmd];
         btn.classList.toggle("hidden", !ok);
     }
@@ -243,7 +248,7 @@ function renderGame(g) {
     $("log").scrollTop = $("log").scrollHeight;
 }
 
-for (const btn of document.querySelectorAll("#actions button")) {
+for (const btn of document.querySelectorAll("#actions button[data-cmd]")) {
     btn.onclick = () => send({ type: btn.dataset.cmd });
 }
 
@@ -266,6 +271,163 @@ function buildingIcons(level) {
         return house;
     });
 }
+
+// ---------------------------------------------------------------- обмен
+
+let lastGame = null;
+/** Черновик предложения живёт на клиенте, пока окно открыто; новые STATE его не сбрасывают. */
+const tradeDraft = { open: false, partnerId: null, give: new Set(), take: new Set() };
+
+function canProposeTrade(g) {
+    return g.currentPlayerId === me.playerId
+        && ["WAITING_FOR_ROLL", "TURN_END"].includes(g.phase)
+        && g.players.some((p) => p.id !== me.playerId && !p.bankrupt);
+}
+
+/** Улицу нельзя обменять, пока в её цветовой группе есть постройки. */
+function tradable(g, t) {
+    return !t.group || !g.tiles.some((s) => s.group === t.group && (g.buildings[s.index] || 0) > 0);
+}
+
+function renderTrade(g, nameOf) {
+    lastGame = g;
+    $("trade-open-btn").classList.toggle("hidden", !canProposeTrade(g));
+    if (tradeDraft.open && !canProposeTrade(g)) closeTradeEditor();
+    if (tradeDraft.open) renderTradeEditor(g);
+    renderTradeOffer(g, nameOf);
+}
+
+function renderTradeEditor(g) {
+    const partners = g.players.filter((p) => p.id !== me.playerId && !p.bankrupt);
+    if (!partners.some((p) => p.id === tradeDraft.partnerId)) {
+        tradeDraft.partnerId = partners[0].id;
+        tradeDraft.take.clear();
+    }
+    $("trade-partner").replaceChildren(...partners.map((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.name;
+        o.selected = p.id === tradeDraft.partnerId;
+        return o;
+    }));
+
+    const mePlayer = g.players.find((p) => p.id === me.playerId);
+    const partner = g.players.find((p) => p.id === tradeDraft.partnerId);
+    renderTradeTiles(g, $("trade-give-tiles"), me.playerId, tradeDraft.give);
+    renderTradeTiles(g, $("trade-take-tiles"), partner.id, tradeDraft.take);
+
+    $("trade-give-money").max = mePlayer.money;
+    $("trade-take-money").max = partner.money;
+    $("trade-give-cards").max = mePlayer.jailFreeCards;
+    $("trade-take-cards").max = partner.jailFreeCards;
+    $("trade-give-cards-row").classList.toggle("hidden", mePlayer.jailFreeCards === 0);
+    $("trade-take-cards-row").classList.toggle("hidden", partner.jailFreeCards === 0);
+}
+
+/** Чекбоксы клеток игрока; выбор хранится в set, клетки, которых у игрока больше нет, из него убираются. */
+function renderTradeTiles(g, container, ownerId, selected) {
+    const tiles = g.tiles.filter((t) => g.owners[t.index] === ownerId);
+    for (const i of [...selected]) {
+        if (g.owners[i] !== ownerId) selected.delete(i);
+    }
+    if (tiles.length === 0) {
+        container.textContent = "нет имущества";
+        return;
+    }
+    container.replaceChildren(...tiles.map((t) => {
+        const label = document.createElement("label");
+        label.className = "trade-tile";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = selected.has(t.index);
+        box.disabled = !tradable(g, t);
+        box.onchange = () => (box.checked ? selected.add(t.index) : selected.delete(t.index));
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.background = t.group ? `var(--${t.group.toLowerCase()})` : "var(--line)";
+        const name = document.createElement("span");
+        name.textContent = t.name + (g.mortgaged.includes(t.index) ? " (залог)" : "")
+            + (tradable(g, t) ? "" : " — есть дома в группе");
+        label.append(box, swatch, name);
+        return label;
+    }));
+}
+
+function openTradeEditor() {
+    tradeDraft.open = true;
+    $("trade-editor").classList.remove("hidden");
+    renderTradeEditor(lastGame);
+}
+
+function closeTradeEditor() {
+    tradeDraft.open = false;
+    $("trade-editor").classList.add("hidden");
+}
+
+function resetTradeDraft() {
+    tradeDraft.give.clear();
+    tradeDraft.take.clear();
+    for (const id of ["trade-give-money", "trade-take-money", "trade-give-cards", "trade-take-cards"]) {
+        $(id).value = 0;
+    }
+}
+
+$("trade-open-btn").onclick = openTradeEditor;
+$("trade-close-btn").onclick = closeTradeEditor;
+$("trade-partner").onchange = () => {
+    tradeDraft.partnerId = $("trade-partner").value;
+    tradeDraft.take.clear();
+    $("trade-take-money").value = 0;
+    $("trade-take-cards").value = 0;
+    renderTradeEditor(lastGame);
+};
+$("trade-send-btn").onclick = () => {
+    const num = (id) => parseInt($(id).value, 10) || 0;
+    send({
+        type: "PROPOSE_TRADE",
+        trade: {
+            toId: tradeDraft.partnerId,
+            giveTiles: [...tradeDraft.give],
+            takeTiles: [...tradeDraft.take],
+            giveMoney: num("trade-give-money"),
+            takeMoney: num("trade-take-money"),
+            giveJailCards: num("trade-give-cards"),
+            takeJailCards: num("trade-take-cards"),
+        },
+    });
+    // окно закроется, когда сервер подтвердит предложение (фаза TRADE_OFFER); при ошибке оно останется открытым
+};
+
+/** Открытое предложение: видно всем, кнопки — адресату (принять/отклонить) и автору (отозвать). */
+function renderTradeOffer(g, nameOf) {
+    const t = g.trade;
+    $("trade-offer").classList.toggle("hidden", !t);
+    if (!t) return;
+    if (t.fromId === me.playerId) resetTradeDraft(); // предложение принято сервером — черновик больше не нужен
+
+    const side = (tiles, money, cards) => {
+        const parts = tiles.map((i) => g.tiles[i].name + (g.mortgaged.includes(i) ? " (залог)" : ""));
+        if (money) parts.push(`$${money}`);
+        if (cards) parts.push(`карточки выхода из тюрьмы: ${cards}`);
+        return parts.length ? parts.join(", ") : "ничего";
+    };
+    const from = nameOf(t.fromId);
+    const to = nameOf(t.toId);
+    $("trade-offer-title").textContent = `Обмен: ${from} → ${to}`;
+    $("trade-offer-give").textContent = `${from} отдаёт: ${side(t.giveTiles, t.giveMoney, t.giveJailCards)}`;
+    $("trade-offer-take").textContent = `${from} получает: ${side(t.takeTiles, t.takeMoney, t.takeJailCards)}`;
+    const hasMortgaged = [...t.giveTiles, ...t.takeTiles].some((i) => g.mortgaged.includes(i));
+    $("trade-offer-note").textContent = hasMortgaged ? "За заложенные клетки получатель сразу платит 10% от залога." : "";
+
+    const isTo = t.toId === me.playerId;
+    $("trade-accept-btn").classList.toggle("hidden", !isTo);
+    $("trade-reject-btn").classList.toggle("hidden", !isTo);
+    $("trade-cancel-btn").classList.toggle("hidden", t.fromId !== me.playerId);
+}
+
+$("trade-accept-btn").onclick = () => send({ type: "ACCEPT_TRADE" });
+$("trade-reject-btn").onclick = () => send({ type: "REJECT_TRADE" });
+$("trade-cancel-btn").onclick = () => send({ type: "CANCEL_TRADE" });
 
 /** Панель долга: видна всем, кнопки — только должнику. */
 function renderDebt(g, nameOf) {
