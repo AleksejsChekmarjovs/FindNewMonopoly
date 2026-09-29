@@ -238,24 +238,6 @@ class HousesTest {
     }
 
     @Test
-    void buildingsAreSoldAutomaticallyToAvoidBankruptcy() {
-        Player alice = new Player("a", "Alice", 250);
-        Game g = new Game(List.of(alice, bob), dice);
-        g.setOwner(MEDITERRANEAN, "a");
-        g.setOwner(BALTIC, "a");
-        g.buildHouse("a", MEDITERRANEAN);
-        g.buildHouse("a", BALTIC); // осталось $150
-
-        dice.then(1, 3); // налог $200: продаёт 2 дома за $50 и платит
-        g.roll("a");
-
-        assertThat(alice.bankrupt()).isFalse();
-        assertThat(alice.money()).isZero();
-        assertThat(g.buildings()).isEmpty();
-        assertThat(g.housesInBank()).isEqualTo(Game.BANK_HOUSES);
-    }
-
-    @Test
     void bankruptcyReturnsBuildingsToBank() {
         Player alice = new Player("a", "Alice", 110);
         Game g = new Game(List.of(alice, bob), dice);

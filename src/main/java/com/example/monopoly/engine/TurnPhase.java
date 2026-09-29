@@ -16,6 +16,11 @@ public enum TurnPhase {
     AWAITING_BUY_DECISION,
     /** Торги за клетку; ходит не текущий игрок, а {@link Auction#currentBidderId()}. */
     AUCTION,
+    /**
+     * Кто-то не смог заплатить сразу; ходит должник ({@link Game#currentDebt()}): продаёт постройки,
+     * закладывает имущество, платит — или объявляет банкротство. После этого игра продолжается с того же места.
+     */
+    PAYING_DEBT,
     TURN_END,
     GAME_OVER
 }

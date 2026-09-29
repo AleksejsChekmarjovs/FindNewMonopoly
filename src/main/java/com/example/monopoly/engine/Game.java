@@ -89,13 +89,18 @@ public class Game {
                     phase = TurnPhase.TURN_END;
                     return;
                 }
-                log(p.name() + " платит $" + JAIL_FINE + " после третьей попытки");
-                pay(p, null, JAIL_FINE);
-                if (p.bankrupt()) {
+                // Третья неудачная попытка: штраф обязателен, и только после него — ход
+                log(p.name() + " должен заплатить $" + JAIL_FINE + " после третьей попытки");
+                int steps = roll.total();
+                Charge result = charge(p, null, JAIL_FINE, () -> {
+                    p.releaseFromJail();
+                    moveBy(p, steps);
+                    resolveLanding(p);
+                });
+                if (result != Charge.PAID) {
                     afterAction();
-                    return;
                 }
-                p.releaseFromJail();
+                return;
             }
         } else if (roll.isDouble()) {
             doublesInRow++;
@@ -182,7 +187,7 @@ public class Game {
     }
 
     public void buildHouse(String playerId, int tileIndex) {
-        Player p = requireManagementTime(playerId);
+        Player p = requireManagementTime(playerId, false);
         Tile tile = requireOwnStreet(p, tileIndex);
         if (!ownsWholeGroup(p.id(), tile.group())) {
             throw new GameException("Сначала соберите все улицы этого цвета");
@@ -219,7 +224,7 @@ public class Game {
     }
 
     public void sellHouse(String playerId, int tileIndex) {
-        Player p = requireManagementTime(playerId);
+        Player p = requireManagementTime(playerId, true);
         Tile tile = requireOwnStreet(p, tileIndex);
         int level = level(tileIndex);
         if (level == 0) {
@@ -504,10 +509,22 @@ public class Game {
         return board.streetsOf(group).stream().mapToInt(t -> level(t.index())).max().orElse(0);
     }
 
-    /** Строить, продавать и закладывать можно в свой ход, кроме аукциона. */
-    private Player requireManagementTime(String playerId) {
+    /**
+     * Строить, продавать и закладывать можно в свой ход, кроме аукциона.
+     * Во время долга — только должнику и только чтобы собрать деньги (продать, заложить).
+     */
+    private Player requireManagementTime(String playerId, boolean raisesMoney) {
         if (phase == TurnPhase.GAME_OVER) {
             throw new GameException("Игра окончена");
+        }
+        if (phase == TurnPhase.PAYING_DEBT) {
+            if (!debts.peekFirst().debt().debtorId().equals(playerId)) {
+                throw new GameException("Сейчас расплачивается другой игрок");
+            }
+            if (!raisesMoney) {
+                throw new GameException("Сначала расплатитесь с долгом");
+            }
+            return player(playerId);
         }
         if (!current().id().equals(playerId)) {
             throw new GameException("Сейчас не ваш ход");
@@ -519,7 +536,7 @@ public class Game {
     }
 
     public void mortgage(String playerId, int tileIndex) {
-        Player p = requireManagementTime(playerId);
+        Player p = requireManagementTime(playerId, true);
         Tile tile = requireOwnOwnable(p, tileIndex);
         if (mortgaged.contains(tileIndex)) {
             throw new GameException(tile.name() + " уже заложена");
@@ -533,7 +550,7 @@ public class Game {
     }
 
     public void unmortgage(String playerId, int tileIndex) {
-        Player p = requireManagementTime(playerId);
+        Player p = requireManagementTime(playerId, false);
         Tile tile = requireOwnOwnable(p, tileIndex);
         if (!mortgaged.contains(tileIndex)) {
             throw new GameException(tile.name() + " не заложена");
@@ -571,24 +588,6 @@ public class Game {
         return tile;
     }
 
-    /** Закладывает незаложенное имущество игрока, пока не наберётся нужная сумма. */
-    private int mortgageUntil(Player p, int amount) {
-        int total = 0;
-        for (int i : ownedBy(p.id())) {
-            if (p.money() >= amount) {
-                break;
-            }
-            if (!mortgaged.contains(i)) {
-                mortgaged.add(i);
-                int value = mortgageValue(board.tile(i));
-                p.addMoney(value);
-                total += value;
-                log(p.name() + " закладывает " + board.tile(i).name() + " за $" + value);
-            }
-        }
-        return total;
-    }
-
     private Tile requireOwnStreet(Player p, int tileIndex) {
         if (tileIndex < 0 || tileIndex >= Board.SIZE) {
             throw new GameException("Нет такой клетки");
@@ -603,10 +602,7 @@ public class Game {
         return tile;
     }
 
-    /**
-     * Продаёт банку все постройки игрока за полцены.
-     * Используется, когда иначе нечем заплатить.
-     */
+    /** Продаёт банку все постройки игрока за полцены — при банкротстве. */
     private int sellAllBuildings(Player p) {
         int total = 0;
         for (int i : ownedBy(p.id())) {
@@ -626,42 +622,130 @@ public class Game {
         return total;
     }
 
-    /**
-     * Перевод денег. {@code to == null} — платёж банку.
-     * Если денег не хватает — сначала продаются постройки, потом закладывается имущество, иначе банкротство.
-     * TODO: дать игроку самому выбирать, что продать или заложить.
-     */
+    // ------------------------------------------------------------------ платежи, долги, банкротство
+
+    /** Результат попытки взять деньги с игрока. */
+    private enum Charge { PAID, DEBT, BANKRUPT }
+
+    /** Неоплаченный долг и что сделать сразу после его оплаты (например, ход после штрафа в тюрьме). */
+    private record PendingDebt(Debt debt, Runnable afterPaid) {
+    }
+
+    private final Deque<PendingDebt> debts = new ArrayDeque<>();
+
+    /** Платёж, после которого поток игры продолжается как обычно. {@code to == null} — банку. */
     private void pay(Player from, Player to, int amount) {
-        if (from.money() < amount) {
-            int sold = sellAllBuildings(from);
-            if (sold > 0) {
-                log(from.name() + " продаёт все постройки за $" + sold + ", чтобы расплатиться");
+        charge(from, to, amount, null);
+    }
+
+    /**
+     * Взять деньги с игрока.
+     * <ul>
+     *   <li>хватает наличных — платёж сразу, затем {@code afterPaid};</li>
+     *   <li>не хватает, но можно продать постройки и заложить имущество — заводится долг,
+     *       игра переходит в {@link TurnPhase#PAYING_DEBT}, {@code afterPaid} выполнится после оплаты;</li>
+     *   <li>не покрыть даже всем имуществом — банкротство сразу.</li>
+     * </ul>
+     * При DEBT и BANKRUPT вызывающий код должен завершить действие через {@link #afterAction()}.
+     */
+    private Charge charge(Player from, Player to, int amount, Runnable afterPaid) {
+        if (from.money() >= amount) {
+            transfer(from, to, amount);
+            if (afterPaid != null) {
+                afterPaid.run();
             }
+            return Charge.PAID;
         }
-        if (from.money() < amount) {
-            mortgageUntil(from, amount);
+        if (liquidationValue(from) >= amount) {
+            debts.addLast(new PendingDebt(new Debt(from.id(), to == null ? null : to.id(), amount), afterPaid));
+            log(from.name() + " должен $" + amount + (to == null ? " банку" : " игроку " + to.name())
+                    + ": нужно продать постройки или заложить имущество");
+            return Charge.DEBT;
         }
-        if (from.money() < amount) {
-            int rest = from.money();
-            if (to != null) {
-                to.addMoney(rest);
-            } else {
-                // Банк забирает имущество без залога; кредитору-игроку оно переходит заложенным
-                mortgaged.removeIf(i -> from.id().equals(owners.get(i)));
-            }
-            owners.replaceAll((tile, owner) -> owner.equals(from.id()) && to != null ? to.id() : owner);
-            owners.values().removeIf(owner -> owner.equals(from.id()));
-            while (from.jailFreeCards() > 0) {
-                deck(from.takeJailFreeCard()).returnJailFreeCard();
-            }
-            from.setBankrupt();
-            log(from.name() + " банкрот!");
-            return;
-        }
+        goBankrupt(from, to);
+        return Charge.BANKRUPT;
+    }
+
+    private void transfer(Player from, Player to, int amount) {
         from.addMoney(-amount);
         if (to != null) {
             to.addMoney(amount);
         }
+    }
+
+    /** Сколько игрок может собрать: наличные + продажа всех построек + залог всего незаложенного. */
+    private int liquidationValue(Player p) {
+        int total = p.money();
+        for (int i : ownedBy(p.id())) {
+            Tile tile = board.tile(i);
+            int level = level(i);
+            if (level > 0) {
+                total += level * tile.group().houseCost() / 2;
+            }
+            if (!mortgaged.contains(i)) {
+                total += mortgageValue(tile);
+            }
+        }
+        return total;
+    }
+
+    public void payDebt(String playerId) {
+        PendingDebt pending = requireDebtor(playerId);
+        Debt debt = pending.debt();
+        Player p = player(playerId);
+        if (p.money() < debt.amount()) {
+            throw new GameException("Не хватает $" + (debt.amount() - p.money())
+                    + ": продайте постройки или заложите имущество");
+        }
+        debts.removeFirst();
+        Player creditor = debt.creditorId() == null ? null : player(debt.creditorId());
+        transfer(p, creditor, debt.amount());
+        log(p.name() + " выплачивает долг $" + debt.amount());
+        if (pending.afterPaid() != null) {
+            pending.afterPaid().run(); // сам завершает действие
+        } else {
+            afterAction();
+        }
+    }
+
+    public void declareBankruptcy(String playerId) {
+        PendingDebt pending = requireDebtor(playerId);
+        debts.removeFirst();
+        String creditorId = pending.debt().creditorId();
+        goBankrupt(player(playerId), creditorId == null ? null : player(creditorId));
+        afterAction();
+    }
+
+    /**
+     * Банкротство: постройки продаются банку, деньги и имущество уходят кредитору
+     * (банку — без залогов, игроку — заложенными как есть). Долги с участием банкрота отменяются.
+     */
+    private void goBankrupt(Player from, Player to) {
+        sellAllBuildings(from);
+        if (to != null) {
+            to.addMoney(from.money());
+        } else {
+            mortgaged.removeIf(i -> from.id().equals(owners.get(i)));
+        }
+        owners.replaceAll((tile, owner) -> owner.equals(from.id()) && to != null ? to.id() : owner);
+        owners.values().removeIf(owner -> owner.equals(from.id()));
+        while (from.jailFreeCards() > 0) {
+            deck(from.takeJailFreeCard()).returnJailFreeCard();
+        }
+        debts.removeIf(d -> d.debt().debtorId().equals(from.id()) || from.id().equals(d.debt().creditorId()));
+        from.setBankrupt();
+        log(from.name() + " банкрот!" + (to == null ? "" : " Всё имущество переходит игроку " + to.name()));
+    }
+
+    private PendingDebt requireDebtor(String playerId) {
+        if (phase != TurnPhase.PAYING_DEBT) {
+            throw new GameException("Сейчас нет долга");
+        }
+        PendingDebt pending = debts.peekFirst();
+        if (!pending.debt().debtorId().equals(playerId)) {
+            throw new GameException("Сейчас расплачивается другой игрок");
+        }
+        return pending;
     }
 
     private void sendToJail(Player p) {
@@ -677,6 +761,10 @@ public class Game {
             winnerId = alive.get(0).id();
             phase = TurnPhase.GAME_OVER;
             log("Победитель: " + alive.get(0).name());
+            return;
+        }
+        if (!debts.isEmpty()) {
+            phase = TurnPhase.PAYING_DEBT;
             return;
         }
         if (current().bankrupt()) {
@@ -730,6 +818,8 @@ public class Game {
     public int housesInBank() { return housesInBank; }
     public int hotelsInBank() { return hotelsInBank; }
     public Set<Integer> mortgaged() { return Set.copyOf(mortgaged); }
+    /** Долг, который сейчас нужно закрыть, или {@code null}. */
+    public Debt currentDebt() { return debts.isEmpty() ? null : debts.peekFirst().debt(); }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 

@@ -149,26 +149,13 @@ class MortgageTest {
     // ---------------------------------------------------------------- долги и банкротство
 
     @Test
-    void propertyIsMortgagedAutomaticallyToPayDebt() {
-        Player alice = new Player("a", "Alice", 150);
-        Game g = newGame(alice, bob);
-        g.setOwner(READING, "a");
-
-        dice.then(1, 3); // налог $200 при $150: закладывает Reading (+$100)
-        g.roll("a");
-
-        assertThat(alice.bankrupt()).isFalse();
-        assertThat(alice.money()).isEqualTo(50);
-        assertThat(g.mortgaged()).containsExactly(READING);
-    }
-
-    @Test
     void bankruptcyToBankClearsMortgages() {
         Player alice = new Player("a", "Alice", 10);
         Game g = newGame(alice, bob);
         g.setOwner(BALTIC, "a");
+        g.mortgage("a", BALTIC); // $40
 
-        dice.then(1, 3); // налог $200: $10 + $30 за залог — не хватает
+        dice.then(1, 3); // налог $200 — не покрыть ничем
         g.roll("a");
 
         assertThat(alice.bankrupt()).isTrue();
@@ -185,8 +172,9 @@ class MortgageTest {
         g.setOwner(15, "b");
         g.setOwner(25, "b");
         g.setOwner(35, "b"); // все 4 ж/д у Bob — аренда $200
+        g.mortgage("a", BALTIC); // $40
 
-        dice.then(2, 3); // Alice -> 5 Reading
+        dice.then(2, 3); // Alice -> 5 Reading, долг не покрыть
         g.roll("a");
 
         assertThat(alice.bankrupt()).isTrue();

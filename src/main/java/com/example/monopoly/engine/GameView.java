@@ -21,6 +21,7 @@ public record GameView(
         DiceRoll lastRoll,
         CardView lastCard,
         AuctionView auction,
+        Debt debt,
         String winnerId,
         List<String> log
 ) {
@@ -60,6 +61,7 @@ public record GameView(
                 card == null ? null : new CardView(card.deck(), card.text()),
                 a == null ? null : new AuctionView(a.tileIndex(), a.highestBid(), a.highestBidderId(),
                         a.currentBidderId(), a.bidders()),
+                game.currentDebt(),
                 game.winnerId(),
                 game.log()
         );
