@@ -219,11 +219,12 @@ function buildBoard(tiles) {
             price.textContent = "$" + t.price;
             el.append(price);
         }
-        const tokens = document.createElement("div");
-        tokens.className = "tokens";
-        el.append(tokens);
         board.append(el);
     }
+    // фишки живут в отдельном слое поверх поля — так их можно плавно двигать между клетками
+    const layer = document.createElement("div");
+    layer.id = "piece-layer";
+    board.append(layer);
     boardBuilt = true;
 }
 
@@ -243,18 +244,10 @@ function renderGame(g) {
         el.classList.toggle("owned", !!owner);
         el.classList.toggle("mortgaged", g.mortgaged.includes(t.index));
         el.style.setProperty("--owner", owner ? colorOf[owner] : "transparent");
-        el.querySelector(".tokens").replaceChildren();
         const slot = el.querySelector(".buildings");
         if (slot) slot.replaceChildren(...buildingIcons(g.buildings[t.index] || 0));
     }
-    for (const p of g.players) {
-        if (p.bankrupt) continue;
-        const token = document.createElement("div");
-        token.className = "token";
-        token.style.background = colorOf[p.id];
-        token.title = p.name;
-        $("tile-" + p.position).querySelector(".tokens").append(token);
-    }
+    renderPieces(g, colorOf);
 
     // статус и кубики
     const current = g.players.find((p) => p.id === g.currentPlayerId);
@@ -387,6 +380,142 @@ function buildingIcons(level) {
         return house;
     });
 }
+
+// ---------------------------------------------------------------- фишки
+
+const BOARD_SIZE = 40;
+/** Один «шаг» фишки по клетке. */
+const STEP_MS = 180;
+/** Длинный путь (карточка «на Старт») идёт быстрее, чтобы не ждать 7 секунд. */
+const MAX_WALK_MS = 2800;
+
+/** id игрока -> { el, shown: клетка, где фишка нарисована сейчас, target, inJail, timer } */
+const pieces = new Map();
+let piecesGame = null;
+
+function renderPieces(g, colorOf) {
+    piecesGame = g;
+    for (const p of g.players) {
+        let piece = pieces.get(p.id);
+        if (!piece) {
+            const el = document.createElement("div");
+            el.className = "piece";
+            el.style.background = colorOf[p.id];
+            el.title = p.name;
+            $("piece-layer").append(el);
+            // первое появление (старт или возвращение в партию) — сразу на место, без анимации
+            piece = { el, shown: p.position, target: p.position, inJail: p.inJail, timer: null };
+            pieces.set(p.id, piece);
+        }
+        piece.el.classList.toggle("hidden", p.bankrupt);
+        piece.el.classList.toggle("current", p.id === g.currentPlayerId && g.phase !== "GAME_OVER");
+        if (p.position !== piece.target) {
+            // идём от клетки, где фишка нарисована сейчас (могла не дойти прошлый путь)
+            walk(piece, walkPath(piece.shown, p.position, g, !piece.inJail && p.inJail));
+            piece.target = p.position;
+        }
+        piece.inJail = p.inJail;
+    }
+    layoutPieces();
+}
+
+/** Путь по клеткам: [{to, back?, jump?}]. */
+function walkPath(from, to, g, wentToJail) {
+    const steps = [];
+    let at = from;
+    const forwardTo = (target) => {
+        while (at !== target) {
+            at = (at + 1) % BOARD_SIZE;
+            steps.push({ to: at });
+        }
+    };
+    if (wentToJail) {
+        // дошли броском до «Отправляйтесь в тюрьму» — показать путь, потом перескок; три дубля — сразу в тюрьму
+        const r = g.lastRoll;
+        const via = r ? (from + r.first + r.second) % BOARD_SIZE : -1;
+        if (via >= 0 && g.tiles[via].type === "GO_TO_JAIL") forwardTo(via);
+        steps.push({ to, jump: true });
+        return steps;
+    }
+    if (g.lastCard?.kind === "MOVE_BACK") {
+        // дошли до «Шанса», а карточка вернула на 3 клетки назад
+        forwardTo((to + 3) % BOARD_SIZE);
+        while (at !== to) {
+            at = (at - 1 + BOARD_SIZE) % BOARD_SIZE;
+            steps.push({ to: at, back: true });
+        }
+        return steps;
+    }
+    forwardTo(to);
+    return steps;
+}
+
+function walk(piece, path) {
+    clearTimeout(piece.timer);
+    const stepMs = Math.min(STEP_MS, MAX_WALK_MS / Math.max(1, path.length));
+    const next = () => {
+        const step = path.shift();
+        if (!step) {
+            piece.timer = null;
+            piece.el.classList.remove("hop", "teleport"); // вернуть пульсацию текущей фишки
+            layoutPieces();
+            return;
+        }
+        piece.shown = step.to;
+        piece.el.style.transitionDuration = step.jump ? "0ms" : `${stepMs}ms`;
+        // «прыжок» на каждую клетку — будто фишка отсчитывает шаги
+        piece.el.classList.remove("hop", "teleport");
+        void piece.el.offsetWidth; // перезапуск CSS-анимации
+        piece.el.classList.add(step.jump ? "teleport" : "hop");
+        piece.el.style.setProperty("--hop-ms", `${stepMs}ms`);
+        layoutPieces();
+        piece.timer = setTimeout(next, step.jump ? 450 : stepMs);
+    };
+    next();
+}
+
+/**
+ * Расставить фишки по клеткам. Фишка игрока, чей ход, — крупная и в центре клетки,
+ * остальные на той же клетке — мелкие, по углам.
+ */
+function layoutPieces() {
+    const g = piecesGame;
+    if (!g) return;
+    const SLOTS = [[-0.28, 0.28], [0.28, 0.28], [-0.28, -0.02], [0.28, -0.02], [0, 0.34], [0, -0.1], [-0.3, 0.12], [0.3, 0.12]];
+    const byTile = new Map();
+    for (const p of g.players) {
+        const piece = pieces.get(p.id);
+        if (!piece || p.bankrupt) continue;
+        if (!byTile.has(piece.shown)) byTile.set(piece.shown, []);
+        byTile.get(piece.shown).push({ p, piece });
+    }
+    for (const [tileIndex, list] of byTile) {
+        const tile = $("tile-" + tileIndex);
+        const w = tile.offsetWidth;
+        const h = tile.offsetHeight;
+        const cx = tile.offsetLeft + w / 2;
+        const cy = tile.offsetTop + h / 2;
+        const s = Math.min(w, h);
+        let slot = 0;
+        for (const { p, piece } of list) {
+            const isCurrent = p.id === g.currentPlayerId && g.phase !== "GAME_OVER";
+            const size = isCurrent ? Math.max(16, s * 0.6) : Math.max(9, s * 0.3);
+            let x = cx;
+            let y = cy;
+            // пока фишка идёт — по центру клеток, чтобы путь был ровным; на месте — по своим углам
+            if (!isCurrent && !piece.timer) {
+                const [fx, fy] = SLOTS[slot++ % SLOTS.length];
+                x += fx * w;
+                y += fy * h;
+            }
+            Object.assign(piece.el.style, {
+                left: `${x}px`, top: `${y}px`, width: `${size}px`, height: `${size}px`,
+            });
+        }
+    }
+}
+
+window.addEventListener("resize", layoutPieces);
 
 // ---------------------------------------------------------------- таймеры
 
