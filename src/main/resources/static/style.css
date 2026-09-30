@@ -117,7 +117,48 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 .tile .name { flex: 1; display: flex; align-items: center; }
 .tile .price { color: var(--muted); }
 .tile.owned { box-shadow: inset 0 0 0 3px var(--owner); }
-.tokens { position: absolute; bottom: 2px; left: 2px; display: flex; flex-wrap: wrap; gap: 2px; }
+/* ---- фишки ---- */
+#board { position: relative; }
+#piece-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.piece {
+    position: absolute;
+    translate: -50% -50%;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--ink), 0 1px 3px rgb(0 0 0 / .35);
+    transition-property: left, top, width, height;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+}
+/* фишка игрока, чей ход: крупная, по центру клетки, с пульсирующим кольцом */
+.piece.current {
+    border-width: 3px;
+    z-index: 1;
+    animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 1px var(--ink), 0 0 0 0 rgb(31 122 77 / .55); }
+    50% { box-shadow: 0 0 0 1px var(--ink), 0 0 0 7px rgb(31 122 77 / 0); }
+}
+/* каждый шаг — маленький прыжок */
+.piece.hop { animation: hop var(--hop-ms, 180ms) ease-out; }
+@keyframes hop {
+    0% { scale: 1; }
+    45% { scale: 1.3; }
+    100% { scale: 1; }
+}
+/* перескок в тюрьму */
+.piece.teleport { animation: teleport 450ms ease-out; }
+@keyframes teleport {
+    0% { opacity: 0; scale: .3; }
+    100% { opacity: 1; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .piece { transition-duration: 0ms !important; }
+    .piece.hop, .piece.teleport, .piece.current { animation: none; }
+}
+
+/* кружок игрока в таблице игроков */
 .token {
     width: clamp(8px, 1.4vw, 14px);
     aspect-ratio: 1;
@@ -281,7 +322,7 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 .property-row.mortgaged .property-name { color: var(--muted); text-decoration: line-through; }
 
 /* заложенная клетка на поле: бледная, с плашкой «ЗАЛОГ» */
-.tile.mortgaged > :not(.tokens) { opacity: .4; }
+.tile.mortgaged > * { opacity: .4; }
 .tile.mortgaged::after {
     content: "ЗАЛОГ";
     position: absolute;

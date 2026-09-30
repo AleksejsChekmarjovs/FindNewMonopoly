@@ -32,7 +32,7 @@ public record GameView(
                              int jailFreeCards, boolean bankrupt) {
     }
 
-    public record CardView(DeckType deck, String text) {
+    public record CardView(DeckType deck, String text, Card.Kind kind) {
     }
 
     public record AuctionView(int tileIndex, int highestBid, String highestBidderId,
@@ -60,7 +60,7 @@ public record GameView(
                 game.current().id(),
                 game.phase(),
                 game.lastRoll(),
-                card == null ? null : new CardView(card.deck(), card.text()),
+                card == null ? null : new CardView(card.deck(), card.text(), card.kind()),
                 a == null ? null : new AuctionView(a.tileIndex(), a.highestBid(), a.highestBidderId(),
                         a.currentBidderId(), a.bidders()),
                 game.currentDebt(),
