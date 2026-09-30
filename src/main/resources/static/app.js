@@ -127,12 +127,26 @@ function hideBanner() {
     $("connection").classList.add("hidden");
 }
 
-// при загрузке страницы — сразу вернуться в свою партию, если она была
+/**
+ * При загрузке страницы. Сессия этой вкладки (перезагрузка, обрыв) — возвращаемся сразу.
+ * Сессия из localStorage может быть чужой: в соседней вкладке человек играет за другого игрока,
+ * и автоматический вход вытеснил бы его. Поэтому только предлагаем кнопку.
+ */
 {
-    const session = loadSession();
-    if (session) {
+    let own = null;
+    try { own = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { /* */ }
+    const last = own ? null : loadSession();
+    if (own) {
         showBanner("Возвращаемся в партию…");
-        resume(session);
+        resume(own);
+    } else if (last) {
+        $("resume-room").textContent = last.roomId;
+        $("resume-row").classList.remove("hidden");
+        $("resume-btn").onclick = () => {
+            $("resume-row").classList.add("hidden");
+            showBanner("Возвращаемся в партию…");
+            resume(last);
+        };
     }
 }
 
