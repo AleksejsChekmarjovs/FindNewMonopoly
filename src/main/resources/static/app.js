@@ -419,7 +419,7 @@ function renderPieces(g, colorOf) {
     layoutPieces();
 }
 
-/** Путь по клеткам: [{to, back?, jump?}]. */
+/** Путь по клеткам: [{to, back?, fly?}]. */
 function walkPath(from, to, g, wentToJail) {
     const steps = [];
     let at = from;
@@ -430,11 +430,14 @@ function walkPath(from, to, g, wentToJail) {
         }
     };
     if (wentToJail) {
-        // дошли броском до «Отправляйтесь в тюрьму» — показать путь, потом перескок; три дубля — сразу в тюрьму
+        // Броском дошли до «Отправляйтесь в тюрьму» или до «Шанса»/«Казны» с такой карточкой —
+        // сначала показываем путь туда, потом перелёт в тюрьму. Три дубля — перелёт прямо с места.
         const r = g.lastRoll;
         const via = r ? (from + r.first + r.second) % BOARD_SIZE : -1;
-        if (via >= 0 && g.tiles[via].type === "GO_TO_JAIL") forwardTo(via);
-        steps.push({ to, jump: true });
+        const viaType = via >= 0 ? g.tiles[via].type : null;
+        const byCard = g.lastCard?.kind === "GO_TO_JAIL" && (viaType === "CHANCE" || viaType === "COMMUNITY_CHEST");
+        if (viaType === "GO_TO_JAIL" || byCard) forwardTo(via);
+        steps.push({ to, fly: true });
         return steps;
     }
     if (g.lastCard?.kind === "MOVE_BACK") {
@@ -450,28 +453,42 @@ function walkPath(from, to, g, wentToJail) {
     return steps;
 }
 
+/** Перелёт в тюрьму через поле и пауза на клетке перед ним — чтобы было видно, откуда отправили. */
+const FLY_MS = 1000;
+const BEFORE_FLY_MS = 400;
+
 function walk(piece, path) {
     clearTimeout(piece.timer);
-    const stepMs = Math.min(STEP_MS, MAX_WALK_MS / Math.max(1, path.length));
+    const walkSteps = path.filter((s) => !s.fly).length;
+    const stepMs = Math.min(STEP_MS, MAX_WALK_MS / Math.max(1, walkSteps));
     const next = () => {
         const step = path.shift();
         if (!step) {
             piece.timer = null;
-            piece.el.classList.remove("hop", "teleport"); // вернуть пульсацию текущей фишки
+            piece.el.classList.remove("hop", "fly"); // вернуть пульсацию текущей фишки
+            piece.el.style.transitionTimingFunction = "";
             layoutPieces();
             return;
         }
         piece.shown = step.to;
-        piece.el.style.transitionDuration = step.jump ? "0ms" : `${stepMs}ms`;
-        // «прыжок» на каждую клетку — будто фишка отсчитывает шаги
-        piece.el.classList.remove("hop", "teleport");
+        const ms = step.fly ? FLY_MS : stepMs;
+        piece.el.style.transitionDuration = `${ms}ms`;
+        piece.el.style.transitionTimingFunction = step.fly ? "ease-in-out" : "";
+        // на каждую клетку — «прыжок», будто фишка отсчитывает шаги; в тюрьму — перелёт через поле
+        piece.el.classList.remove("hop", "fly");
         void piece.el.offsetWidth; // перезапуск CSS-анимации
-        piece.el.classList.add(step.jump ? "teleport" : "hop");
-        piece.el.style.setProperty("--hop-ms", `${stepMs}ms`);
+        piece.el.classList.add(step.fly ? "fly" : "hop");
+        piece.el.style.setProperty("--step-ms", `${ms}ms`);
         layoutPieces();
-        piece.timer = setTimeout(next, step.jump ? 450 : stepMs);
+        const pause = path[0]?.fly && !step.fly ? BEFORE_FLY_MS : 0;
+        piece.timer = setTimeout(next, ms + pause);
     };
-    next();
+    // если перелёт сразу (три дубля) — тоже короткая пауза на месте
+    if (path[0]?.fly) {
+        piece.timer = setTimeout(next, BEFORE_FLY_MS);
+    } else {
+        next();
+    }
 }
 
 /**
