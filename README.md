@@ -1,9 +1,12 @@
 # Монополия
 
-Браузерная многопользовательская «Монополия». Бэкенд — Java 21 + Spring Boot, клиент — чистый HTML/JS
+Браузерная многопользовательская «Монополия». Бэкенд — Java 25 + Spring Boot, клиент — чистый HTML/JS
 (отдаётся самим Spring Boot, Node.js не нужен). Связь — WebSocket (`/ws`), JSON-сообщения.
 
 ## Запуск
+
+Нужна JDK 25 (например, Eclipse Temurin 25: `winget install --id EclipseAdoptium.Temurin.25.JDK`).
+Maven ставить не нужно — его скачает `mvnw`.
 
 ```bash
 ./mvnw spring-boot:run
