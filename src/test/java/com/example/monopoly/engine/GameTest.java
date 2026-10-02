@@ -229,6 +229,8 @@ class GameTest {
 
         dice.then(1, 3); // налог 200 при 100 на счету
         TestMoves.roll(g, "p");
+        assertThat(g.currentDebt().hopeless()).isTrue(); // карточка «Банкрот»
+        g.declareBankruptcy("p");
 
         assertThat(poor.bankrupt()).isTrue();
         assertThat(g.phase()).isEqualTo(TurnPhase.GAME_OVER);

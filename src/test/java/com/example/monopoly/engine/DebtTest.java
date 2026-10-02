@@ -148,16 +148,57 @@ class DebtTest {
     }
 
     @Test
-    void assetsTooSmallMeansImmediateBankruptcy() {
+    void assetsTooSmallMeansBankruptcyCardThenBankruptcy() {
         Player alice = new Player("a", "Alice", 100);
         Game g = newGame(alice, bob);
         g.setOwner(BALTIC, "a"); // $100 + $30 < $200
 
         dice.then(1, 3);
         TestMoves.roll(g, "a");
+        assertThat(g.currentDebt().hopeless()).isTrue(); // карточка «Банкрот»
+        g.declareBankruptcy("a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.currentDebt()).isNull();
+    }
+
+    @Test
+    void hopelessDebtAllowsOnlyBankruptcy() {
+        Player alice = new Player("a", "Alice", 100);
+        Game g = newGame(alice, bob);
+        g.setOwner(BALTIC, "a");
+        dice.then(1, 3); // налог $200: $100 + залог $30 не хватит
+        TestMoves.roll(g, "a");
+
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
+        assertThat(g.currentDebt()).isEqualTo(new Debt("a", null, 200, true));
+        assertThat(alice.bankrupt()).isFalse(); // ещё не банкрот — ждём кнопку «Банкрот»
+        assertThatThrownBy(() -> g.mortgage("a", BALTIC)).hasMessageContaining("только объявить банкротство");
+        assertThatThrownBy(() -> g.payDebt("a")).hasMessageContaining("Не хватает");
+    }
+
+    @Test
+    void hopelessDebtGoesBankruptOnTimeoutWithoutSellingAnything() {
+        MutableClock clock = new MutableClock();
+        Player alice = new Player("a", "Alice", 10);
+        Game g = new Game(List.of(alice, bob), dice,
+                new Deck(List.of(Card.of(DeckType.CHANCE, "ничего", Card.Kind.GAIN, 0))),
+                new Deck(List.of(Card.of(DeckType.COMMUNITY_CHEST, "ничего", Card.Kind.GAIN, 0))), clock);
+        g.setOwner(BALTIC, "a");
+        g.setOwner(READING, "b");
+        g.setOwner(15, "b");
+        g.setOwner(25, "b");
+        g.setOwner(35, "b"); // аренда $200
+        dice.then(2, 3);     // Alice -> 5 Reading Bob
+        TestMoves.roll(g, "a");
+        assertThat(g.currentDebt().hopeless()).isTrue();
+
+        clock.advance(java.time.Duration.ofMinutes(3));
+        g.tick();
+
+        assertThat(alice.bankrupt()).isTrue();
+        assertThat(g.owners()).containsEntry(BALTIC, "b");
+        assertThat(g.mortgaged()).doesNotContain(BALTIC); // ничего не закладывалось перед банкротством
     }
 
     // ---------------------------------------------------------------- долг не у текущего игрока

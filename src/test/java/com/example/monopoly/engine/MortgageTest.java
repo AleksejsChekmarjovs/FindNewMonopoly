@@ -157,6 +157,8 @@ class MortgageTest {
 
         dice.then(1, 3); // налог $200 — не покрыть ничем
         TestMoves.roll(g, "a");
+        assertThat(g.currentDebt().hopeless()).isTrue(); // карточка «Банкрот»
+        g.declareBankruptcy("a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.owners()).doesNotContainKey(BALTIC);
@@ -176,6 +178,8 @@ class MortgageTest {
 
         dice.then(2, 3); // Alice -> 5 Reading, долг не покрыть
         TestMoves.roll(g, "a");
+        assertThat(g.currentDebt().hopeless()).isTrue(); // карточка «Банкрот»
+        g.declareBankruptcy("a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.owners()).containsEntry(BALTIC, "b");
