@@ -98,6 +98,7 @@ public class Game {
     public void passAuction(String playerId) { command(() -> doPassAuction(playerId)); }
     public void payJailFine(String playerId) { command(() -> doPayJailFine(playerId)); }
     public void useJailFreeCard(String playerId) { command(() -> doUseJailFreeCard(playerId)); }
+    public void closeCard(String playerId) { command(() -> doCloseCard(playerId)); }
     public void endTurn(String playerId) { command(() -> doEndTurn(playerId)); }
     public void buildHouse(String playerId, int tileIndex) { command(() -> doBuildHouse(playerId, tileIndex)); }
     public void sellHouse(String playerId, int tileIndex) { command(() -> doSellHouse(playerId, tileIndex)); }
@@ -351,11 +352,11 @@ public class Game {
                 sendToJail(p);
             }
             case CHANCE -> {
-                applyCard(p, chance.draw());
-                return; // applyCard сам завершает действие
+                revealCard(p, chance.draw());
+                return; // карточка выполнится, когда игрок её закроет
             }
             case COMMUNITY_CHEST -> {
-                applyCard(p, communityChest.draw());
+                revealCard(p, communityChest.draw());
                 return;
             }
             case GO, JAIL, FREE_PARKING -> { }
@@ -363,11 +364,26 @@ public class Game {
         afterAction();
     }
 
-    private void applyCard(Player p, Card card) {
+    /** Вытянутая, но ещё не выполненная карточка — её видят все, выполнится после закрытия. */
+    private Card revealedCard;
+
+    private void revealCard(Player p, Card card) {
         lastCard = card;
+        revealedCard = card;
+        phase = TurnPhase.CARD_REVEAL;
         String deckName = card.deck() == DeckType.CHANCE ? "Шанс" : "Общественная казна";
         log(p.name() + " тянет «" + deckName + "»: " + card.text());
+    }
 
+    /** Игрок закрыл открытую карточку — теперь она выполняется. */
+    private void doCloseCard(String playerId) {
+        Player p = requireTurn(playerId, TurnPhase.CARD_REVEAL);
+        Card card = revealedCard;
+        revealedCard = null;
+        applyCard(p, card);
+    }
+
+    private void applyCard(Player p, Card card) {
         switch (card.kind()) {
             case MOVE_TO -> {
                 moveTo(p, card.amount());
@@ -1074,6 +1090,7 @@ public class Game {
         }
         switch (phase) {
             case WAITING_FOR_ROLL -> doRoll(p.id());
+            case CARD_REVEAL -> doCloseCard(p.id());
             case AWAITING_BUY_DECISION -> doDeclineBuy(p.id());
             case TURN_END -> doEndTurn(p.id());
             case PAYING_DEBT -> autoSettleDebt(p);
@@ -1151,7 +1168,7 @@ public class Game {
 
     private boolean waitingOnCurrentPlayer() {
         return switch (phase) {
-            case WAITING_FOR_ROLL, AWAITING_BUY_DECISION, TURN_END -> true;
+            case WAITING_FOR_ROLL, AWAITING_BUY_DECISION, CARD_REVEAL, TURN_END -> true;
             case PAYING_DEBT -> debts.peekFirst().debt().debtorId().equals(current().id());
             default -> false;
         };

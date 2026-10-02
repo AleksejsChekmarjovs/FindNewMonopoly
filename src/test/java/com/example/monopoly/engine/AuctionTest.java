@@ -23,7 +23,7 @@ class AuctionTest {
     private Game aliceDeclinesBaltic(Player... players) {
         Game g = newGame(players);
         dice.then(1, 2);
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.declineBuy("a");
         return g;
     }
@@ -126,7 +126,7 @@ class AuctionTest {
         Game g = aliceDeclinesBaltic(alice, bob);
 
         assertThatThrownBy(() -> g.endTurn("a")).isInstanceOf(GameException.class);
-        assertThatThrownBy(() -> g.roll("a")).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> TestMoves.roll(g, "a")).isInstanceOf(GameException.class);
     }
 
     @Test
@@ -144,7 +144,7 @@ class AuctionTest {
         Game g = newGame(poor, bob);
 
         dice.then(4, 5); // -> 9 Connecticut Ave, $120
-        g.roll("p");
+        TestMoves.roll(g, "p");
 
         // Можно заложить имущество и купить — поэтому решение всё равно за игроком
         assertThat(g.phase()).isEqualTo(TurnPhase.AWAITING_BUY_DECISION);
@@ -160,7 +160,7 @@ class AuctionTest {
     void doublesStillGiveExtraRollAfterAuction() {
         Game g = newGame(alice, bob);
         dice.then(3, 3); // -> 6 Oriental Ave
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.declineBuy("a");
         TestMoves.passAll(g);
 

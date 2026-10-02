@@ -37,7 +37,7 @@ class CardTest {
     void moveToStreetWithoutPassingGo() {
         Game g = withChance(Card.of(CHANCE, "Boardwalk", MOVE_TO, 39));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.position()).isEqualTo(39);
         assertThat(alice.money()).isEqualTo(1500);
@@ -49,7 +49,7 @@ class CardTest {
     void advanceToGoPaysSalary() {
         Game g = withChance(Card.of(CHANCE, "Старт", MOVE_TO, 0));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.position()).isEqualTo(0);
         assertThat(alice.money()).isEqualTo(1500 + Game.GO_SALARY);
@@ -60,7 +60,7 @@ class CardTest {
     void goBackThreeSpacesResolvesNewTile() {
         Game g = withChance(Card.of(CHANCE, "назад", MOVE_BACK, 3));
         dice.then(3, 4); // 7 -> 4 Подоходный налог
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.position()).isEqualTo(4);
         assertThat(alice.money()).isEqualTo(1500 - 200);
@@ -72,12 +72,12 @@ class CardTest {
         play(g, "a", 1, 3);        // Alice -> 4, налог 200
         play(g, "b", 1, 2);        // Bob -> 3
         dice.then(5, 6);           // Alice -> 15 Pennsylvania Railroad
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.buy("a");
         g.endTurn("a");
 
         dice.then(1, 3);           // Bob -> 7 Шанс -> 15
-        g.roll("b");
+        TestMoves.roll(g, "b");
 
         assertThat(bob.position()).isEqualTo(15);
         assertThat(bob.money()).isEqualTo(1500 - 50);
@@ -88,7 +88,7 @@ class CardTest {
     void nearestRailroadUnownedOffersPurchase() {
         Game g = withChance(Card.of(CHANCE, "ж/д", NEAREST_RAILROAD));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.position()).isEqualTo(15);
         assertThat(g.phase()).isEqualTo(TurnPhase.AWAITING_BUY_DECISION);
@@ -100,12 +100,12 @@ class CardTest {
         play(g, "a", 1, 3);        // Alice -> 4
         play(g, "b", 1, 2);        // Bob -> 3
         dice.then(3, 5);           // Alice -> 12 Электростанция
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.buy("a");
         g.endTurn("a");
 
         dice.then(1, 3).then(2, 3); // Bob -> 7 Шанс -> 12, бросок для аренды 5
-        g.roll("b");
+        TestMoves.roll(g, "b");
 
         assertThat(bob.position()).isEqualTo(12);
         assertThat(bob.money()).isEqualTo(1500 - 50);
@@ -120,7 +120,7 @@ class CardTest {
         play(g, "a", 5, 6);  // 22 Шанс -> 25
         play(g, "b", 1, 3);  // 8
         dice.then(5, 6);     // 25 -> 36 Шанс -> 5, через «Старт»
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.position()).isEqualTo(5);
         assertThat(alice.money()).isEqualTo(1500 + Game.GO_SALARY);
@@ -132,7 +132,7 @@ class CardTest {
     void goToJailCard() {
         Game g = withChance(Card.of(CHANCE, "тюрьма", GO_TO_JAIL));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.inJail()).isTrue();
         assertThat(alice.position()).isEqualTo(Board.JAIL_INDEX);
@@ -179,12 +179,12 @@ class CardTest {
         Game g = withChest(Card.of(COMMUNITY_CHEST, "ошибка банка", GAIN, 200),
                 Card.of(COMMUNITY_CHEST, "врач", PAY, 50));
         dice.then(1, 1);            // Alice -> 2 Казна: +200, дубль — ещё бросок
-        g.roll("a");
+        TestMoves.roll(g, "a");
         assertThat(alice.money()).isEqualTo(1700);
         play(g, "a", 1, 2);         // Alice -> 5
 
         dice.then(1, 1);            // Bob -> 2 Казна: -50
-        g.roll("b");
+        TestMoves.roll(g, "b");
         assertThat(bob.money()).isEqualTo(1450);
     }
 
@@ -192,7 +192,7 @@ class CardTest {
     void birthdayCollectsFromEveryPlayer() {
         Game g = withChest(Card.of(COMMUNITY_CHEST, "день рождения", GAIN_FROM_EACH, 10));
         dice.then(1, 1);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.money()).isEqualTo(1510);
         assertThat(bob.money()).isEqualTo(1490);
@@ -202,7 +202,7 @@ class CardTest {
     void chairmanPaysEveryPlayer() {
         Game g = withChance(Card.of(CHANCE, "председатель", PAY_EACH, 50));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.money()).isEqualTo(1450);
         assertThat(bob.money()).isEqualTo(1550);
@@ -212,7 +212,7 @@ class CardTest {
     void repairsWithoutBuildingsCostNothing() {
         Game g = withChance(new Card(CHANCE, "ремонт", REPAIRS, 25, 100));
         dice.then(3, 4);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.money()).isEqualTo(1500);
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
@@ -242,7 +242,7 @@ class CardTest {
     /** Ход без дубля: бросок, отказ от покупки при необходимости, конец хода. */
     private void play(Game g, String id, int d1, int d2) {
         dice.then(d1, d2);
-        g.roll(id);
+        TestMoves.roll(g, id);
         if (g.phase() == TurnPhase.AWAITING_BUY_DECISION) {
             TestMoves.declineAndNobodyBids(g, id);
         }

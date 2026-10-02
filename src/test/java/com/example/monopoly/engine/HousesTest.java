@@ -148,7 +148,7 @@ class HousesTest {
         assertThatThrownBy(() -> game.buildHouse("b", 37)).hasMessageContaining("не ваш ход");
 
         dice.then(2, 4); // -> 6 Oriental, решение о покупке — строить можно
-        game.roll("a");
+        TestMoves.roll(game, "a");
         build(game, BALTIC);
 
         game.declineBuy("a"); // аукцион — нельзя
@@ -211,11 +211,11 @@ class HousesTest {
         giveAliceBrowns(game);
         build(game, MEDITERRANEAN, BALTIC);
         dice.then(1, 3);
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.endTurn("a");
 
         dice.then(1, 2); // Bob -> 3 Baltic, 1 дом
-        game.roll("b");
+        TestMoves.roll(game, "b");
 
         assertThat(bob.money()).isEqualTo(1500 - 20);
     }
@@ -232,7 +232,7 @@ class HousesTest {
         int before = alice.money();
 
         dice.then(3, 4); // -> 7 Шанс
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.money()).isEqualTo(before - (4 * 25 + 100));
     }
@@ -247,7 +247,7 @@ class HousesTest {
         g.buildHouse("a", BALTIC); // осталось $10
 
         dice.then(1, 3); // налог $200 — даже с продажей домов не хватает
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.buildings()).isEmpty();

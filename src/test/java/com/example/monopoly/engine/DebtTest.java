@@ -34,7 +34,7 @@ class DebtTest {
         Game g = newGame(alice, bob);
         g.setOwner(READING, "a");
         dice.then(1, 3);
-        g.roll("a");
+        TestMoves.roll(g, "a");
         return g;
     }
 
@@ -76,7 +76,7 @@ class DebtTest {
         g.buildHouse("a", BALTIC); // $150
 
         dice.then(1, 3); // налог $200
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.sellHouse("a", MEDITERRANEAN);
         g.sellHouse("a", BALTIC); // $200
         g.payDebt("a");
@@ -95,7 +95,7 @@ class DebtTest {
         g.setOwner(READING, "a");
         g.mortgage("a", BALTIC); // $180
         dice.then(1, 3); // налог $200
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThatThrownBy(() -> g.unmortgage("a", BALTIC)).hasMessageContaining("Сначала расплатитесь");
         assertThatThrownBy(() -> g.buildHouse("a", MEDITERRANEAN)).hasMessageContaining("Сначала расплатитесь");
@@ -110,7 +110,7 @@ class DebtTest {
 
         assertThatThrownBy(() -> g.mortgage("b", 6)).hasMessageContaining("другой игрок");
         assertThatThrownBy(() -> g.payDebt("b")).hasMessageContaining("другой игрок");
-        assertThatThrownBy(() -> g.roll("b")).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> TestMoves.roll(g, "b")).isInstanceOf(GameException.class);
     }
 
     @Test
@@ -135,7 +135,7 @@ class DebtTest {
         g.setOwner(35, "b");     // 4 ж/д у Bob — аренда $200
 
         dice.then(2, 3);         // Alice -> 5 Reading
-        g.roll("a");
+        TestMoves.roll(g, "a");
         assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
 
         g.declareBankruptcy("a");
@@ -154,7 +154,7 @@ class DebtTest {
         g.setOwner(BALTIC, "a"); // $100 + $30 < $200
 
         dice.then(1, 3);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.currentDebt()).isNull();
@@ -171,7 +171,7 @@ class DebtTest {
         g.setOwner(BALTIC, "b");
 
         dice.then(1, 1); // Alice -> 2 Казна, дубль
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
         assertThat(g.currentDebt()).isEqualTo(new Debt("b", "a", 10));
@@ -197,7 +197,7 @@ class DebtTest {
         g.setOwner(MEDITERRANEAN, "c");
 
         dice.then(1, 1);
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(g.currentDebt().debtorId()).isEqualTo("b");
         g.mortgage("b", BALTIC);
@@ -223,21 +223,21 @@ class DebtTest {
 
         // Alice в тюрьму: три дубля подряд
         dice.then(1, 1).then(2, 2).then(3, 3);
-        g.roll("a");                                  // 2 Казна
-        g.roll("a");                                  // 6 Oriental — не хватает, отказ
+        TestMoves.roll(g, "a");                                  // 2 Казна
+        TestMoves.roll(g, "a");                                  // 6 Oriental — не хватает, отказ
         TestMoves.declineAndNobodyBids(g, "a");
-        g.roll("a");                                  // третий дубль — тюрьма
+        TestMoves.roll(g, "a");                                  // третий дубль — тюрьма
         g.endTurn("a");
         playBob(g);
         for (int i = 0; i < 2; i++) {                 // две неудачные попытки
             dice.then(1, 2);
-            g.roll("a");
+            TestMoves.roll(g, "a");
             g.endTurn("a");
             playBob(g);
         }
 
         dice.then(1, 2);                              // третья неудача: штраф $50 при $40
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
         assertThat(alice.inJail()).isTrue();
@@ -254,7 +254,7 @@ class DebtTest {
 
     private void playBob(Game g) {
         dice.then(1, 3);
-        g.roll("b");
+        TestMoves.roll(g, "b");
         if (g.phase() == TurnPhase.AWAITING_BUY_DECISION) {
             TestMoves.declineAndNobodyBids(g, "b");
         }
