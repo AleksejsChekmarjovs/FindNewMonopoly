@@ -303,8 +303,9 @@ function renderDetails(g) {
             : `${nameOf(g.trade.fromId)} предлагает обмен игроку ${nameOf(g.trade.toId)}`;
     } else if (g.phase === "CARD_REVEAL") {
         $("status").textContent = myTurn ? "Прочитайте карточку и закройте её" : `${current.name} читает карточку`;
-    } else if (g.phase === "RENT_DUE") {
-        $("status").textContent = myTurn ? "Заплатите аренду" : `${current.name} платит аренду`;
+    } else if (g.phase === "PAYMENT_DUE") {
+        const what = g.paymentDue?.creditorId ? "аренду" : "налог";
+        $("status").textContent = myTurn ? `Заплатите ${what}` : `${current.name} платит ${what}`;
     } else if (g.phase === "PAYING_DEBT") {
         $("status").textContent = g.debt.debtorId === me.playerId
             ? "Вам не хватает денег — расплатитесь с долгом"
@@ -314,7 +315,7 @@ function renderDetails(g) {
     }
 
     renderCardReveal(g, current, myTurn);
-    renderRentDue(g, current, myTurn);
+    renderPaymentDue(g, current, myTurn);
 
     // последняя вытянутая карточка (пока она открыта крупно по центру — маленькую не показываем)
     const card = $("card");
@@ -1045,36 +1046,45 @@ function renderCardReveal(g, current, myTurn) {
  * Окно аренды: игрок попал на чужую клетку. Видно всем; кнопка «Заплатить» — только тому, кто платит.
  * Не хватает наличных — после нажатия начнётся расплата с долгом.
  */
-function renderRentDue(g, current, myTurn) {
-    const box = $("rent-due");
-    const due = g.phase === "RENT_DUE" ? g.rentDue : null;
+function renderPaymentDue(g, current, myTurn) {
+    const box = $("payment-due");
+    const due = g.phase === "PAYMENT_DUE" ? g.paymentDue : null;
     box.classList.toggle("hidden", !due);
     if (!due) return;
-    const owner = g.players.find((p) => p.id === due.ownerId);
-    const ownerColor = colorsOf(g)[due.ownerId];
-    box.style.setProperty("--card-color", ownerColor);
-    $("rent-due-tile").textContent = g.tiles[due.tileIndex].name;
-    const name = el("span", "tile-card-owner", owner.name + (owner.id === me.playerId ? " (вы)" : ""));
-    name.style.color = ownerColor;
-    $("rent-due-owner").replaceChildren("Владелец: ", name);
-    $("rent-due-amount").textContent = `$${due.amount}`;
+    $("payment-due-tile").textContent = g.tiles[due.tileIndex].name;
+    $("payment-due-amount").textContent = `$${due.amount}`;
+    if (due.creditorId) {
+        // аренда: рамка и кнопка — цвета владельца, его имя жирным его цветом
+        const owner = g.players.find((p) => p.id === due.creditorId);
+        const ownerColor = colorsOf(g)[due.creditorId];
+        box.style.setProperty("--card-color", ownerColor);
+        $("payment-due-kind").textContent = "Аренда";
+        const name = el("span", "tile-card-owner", owner.name + (owner.id === me.playerId ? " (вы)" : ""));
+        name.style.color = ownerColor;
+        $("payment-due-owner").replaceChildren("Владелец: ", name);
+    } else {
+        // налог: платёж банку, у банка нет цвета игрока — тёмно-красная рамка
+        box.style.setProperty("--card-color", "var(--danger)");
+        $("payment-due-kind").textContent = "Налог";
+        $("payment-due-owner").replaceChildren("Платёж банку");
+    }
 
     const payer = g.players.find((p) => p.id === g.currentPlayerId);
     const short = payer.money < due.amount;
-    $("rent-due-note").textContent = myTurn && short
+    $("payment-due-note").textContent = myTurn && short
         ? `Наличных $${payer.money} — не хватает. После оплаты нужно будет продать дома или заложить имущество.`
         : "";
-    $("rent-due-pay").textContent = `Заплатить $${due.amount}`;
-    $("rent-due-pay").classList.toggle("hidden", !myTurn);
-    $("rent-due-wait").classList.toggle("hidden", myTurn);
-    $("rent-due-wait").textContent = `Ждём, пока ${current.name} заплатит`;
-    if (myTurn) $("rent-due-pay").focus();
+    $("payment-due-pay").textContent = `${due.creditorId ? "Заплатить" : "Оплатить"} $${due.amount}`;
+    $("payment-due-pay").classList.toggle("hidden", !myTurn);
+    $("payment-due-wait").classList.toggle("hidden", myTurn);
+    $("payment-due-wait").textContent = `Ждём, пока ${current.name} заплатит`;
+    if (myTurn) $("payment-due-pay").focus();
 }
 
-$("rent-due-pay").onclick = () => {
+$("payment-due-pay").onclick = () => {
     // скрываем сразу — дальше обновится остальной интерфейс (деньги, журнал, долг)
-    $("rent-due").classList.add("hidden");
-    send({ type: "PAY_RENT" });
+    $("payment-due").classList.add("hidden");
+    send({ type: "PAY_DUE" });
 };
 
 $("card-reveal-close").onclick = () => {

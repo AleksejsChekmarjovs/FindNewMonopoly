@@ -74,7 +74,8 @@ class CardRevealTest {
     void doublesExtraRollKeptAfterCard() {
         Game g = withChance(Card.of(CHANCE, "Дивиденды", GAIN, 50));
         dice.then(2, 2).then(1, 2);
-        g.roll("a");                // дубль -> 4, ещё бросок
+        g.roll("a");                // дубль -> 4 налог, ещё бросок
+        g.payDue("a");
         assertThat(g.phase()).isEqualTo(TurnPhase.WAITING_FOR_ROLL);
         g.roll("a");                // 7 «Шанс»
         assertThat(g.phase()).isEqualTo(TurnPhase.CARD_REVEAL);
