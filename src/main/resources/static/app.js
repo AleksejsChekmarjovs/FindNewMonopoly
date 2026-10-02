@@ -571,12 +571,21 @@ function tileCardContent(g, t) {
         body.querySelectorAll("tr.current").forEach((tr) => tr.classList.remove("current"));
     }
 
-    const status = [];
-    status.push(ownerId ? `Владелец: ${nameOf(ownerId)}${ownerId === me.playerId ? " (вы)" : ""}` : "Свободна — у банка");
-    if (level === 5) status.push("Стоит отель");
-    else if (level > 0) status.push(`Домов: ${level}`);
-    if (mortgaged) status.push("Заложена — аренда не платится");
-    body.append(el("div", "tile-card-status", status.join(" · ")));
+    // имя владельца — жирным и его цветом (как его фишка)
+    const statusEl = el("div", "tile-card-status");
+    if (ownerId) {
+        const owner = el("span", "tile-card-owner", nameOf(ownerId) + (ownerId === me.playerId ? " (вы)" : ""));
+        owner.style.color = colorsOf(g)[ownerId];
+        statusEl.append("Владелец: ", owner);
+    } else {
+        statusEl.append("Свободна — у банка");
+    }
+    const extra = [];
+    if (level === 5) extra.push("Стоит отель");
+    else if (level > 0) extra.push(`Домов: ${level}`);
+    if (mortgaged) extra.push("Заложена — аренда не платится");
+    if (extra.length) statusEl.append(" · " + extra.join(" · "));
+    body.append(statusEl);
     return parts;
 }
 

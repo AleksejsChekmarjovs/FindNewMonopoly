@@ -201,6 +201,12 @@ body.animating #center input {
 .tile-card-table tr.current { background: var(--board); font-weight: 700; }
 .tile-card-text { margin: 0; line-height: 1.4; }
 .tile-card-status { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+/* тонкая тёмная обводка — чтобы читались и светлые цвета игроков (жёлтый) */
+.tile-card-owner {
+    font-weight: 700;
+    text-shadow: -.5px -.5px 0 rgb(0 0 0 / .55), .5px -.5px 0 rgb(0 0 0 / .55),
+                 -.5px .5px 0 rgb(0 0 0 / .55), .5px .5px 0 rgb(0 0 0 / .55);
+}
 
 /* кружок игрока в таблице игроков */
 .token {
