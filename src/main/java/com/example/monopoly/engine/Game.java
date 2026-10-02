@@ -99,6 +99,7 @@ public class Game {
     public void payJailFine(String playerId) { command(() -> doPayJailFine(playerId)); }
     public void useJailFreeCard(String playerId) { command(() -> doUseJailFreeCard(playerId)); }
     public void closeCard(String playerId) { command(() -> doCloseCard(playerId)); }
+    public void payRent(String playerId) { command(() -> doPayRent(playerId)); }
     public void endTurn(String playerId) { command(() -> doEndTurn(playerId)); }
     public void buildHouse(String playerId, int tileIndex) { command(() -> doBuildHouse(playerId, tileIndex)); }
     public void sellHouse(String playerId, int tileIndex) { command(() -> doSellHouse(playerId, tileIndex)); }
@@ -339,8 +340,11 @@ public class Game {
                             yield 10 * r.total();
                         }
                     };
-                    log(p.name() + " платит аренду $" + rent + " игроку " + owner.name());
-                    pay(p, owner, rent);
+                    // аренда показывается всем и списывается, когда игрок нажмёт «Заплатить»
+                    rentDue = new RentDue(owner.id(), tile.index(), rent);
+                    phase = TurnPhase.RENT_DUE;
+                    log(p.name() + " должен заплатить аренду $" + rent + " игроку " + owner.name());
+                    return;
                 }
             }
             case TAX -> {
@@ -361,6 +365,20 @@ public class Game {
             }
             case GO, JAIL, FREE_PARKING -> { }
         }
+        afterAction();
+    }
+
+    /** Аренда, которую игрок должен заплатить (фаза RENT_DUE), или {@code null}. */
+    private RentDue rentDue;
+
+    /** Игрок нажал «Заплатить»: аренда списывается (не хватит наличных — долг или банкротство). */
+    private void doPayRent(String playerId) {
+        Player p = requireTurn(playerId, TurnPhase.RENT_DUE);
+        RentDue due = rentDue;
+        rentDue = null;
+        Player owner = player(due.ownerId());
+        log(p.name() + " платит аренду $" + due.amount() + " игроку " + owner.name());
+        pay(p, owner, due.amount());
         afterAction();
     }
 
@@ -1091,6 +1109,7 @@ public class Game {
         switch (phase) {
             case WAITING_FOR_ROLL -> doRoll(p.id());
             case CARD_REVEAL -> doCloseCard(p.id());
+            case RENT_DUE -> doPayRent(p.id());
             case AWAITING_BUY_DECISION -> doDeclineBuy(p.id());
             case TURN_END -> doEndTurn(p.id());
             case PAYING_DEBT -> autoSettleDebt(p);
@@ -1168,7 +1187,7 @@ public class Game {
 
     private boolean waitingOnCurrentPlayer() {
         return switch (phase) {
-            case WAITING_FOR_ROLL, AWAITING_BUY_DECISION, CARD_REVEAL, TURN_END -> true;
+            case WAITING_FOR_ROLL, AWAITING_BUY_DECISION, CARD_REVEAL, RENT_DUE, TURN_END -> true;
             case PAYING_DEBT -> debts.peekFirst().debt().debtorId().equals(current().id());
             default -> false;
         };
@@ -1225,6 +1244,8 @@ public class Game {
     public Debt currentDebt() { return debts.isEmpty() ? null : debts.peekFirst().debt(); }
     /** Открытое предложение обмена или {@code null}. */
     public TradeOffer trade() { return trade; }
+    /** Аренда к оплате или {@code null}. */
+    public RentDue rentDue() { return rentDue; }
     public String winnerId() { return winnerId; }
     public List<String> log() { return List.copyOf(log); }
 

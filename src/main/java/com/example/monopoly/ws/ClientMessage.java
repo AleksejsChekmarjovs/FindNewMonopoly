@@ -2,7 +2,7 @@ package com.example.monopoly.ws;
 
 /**
  * Команда от клиента.
- * type: CREATE {name} | JOIN {roomId, name} | RESUME {roomId, token} | START | ROLL | BUY | DECLINE | CLOSE_CARD | PAY_JAIL_FINE | USE_JAIL_CARD
+ * type: CREATE {name} | JOIN {roomId, name} | RESUME {roomId, token} | START | ROLL | BUY | DECLINE | CLOSE_CARD | PAY_RENT | PAY_JAIL_FINE | USE_JAIL_CARD
  *       | BID {amount} | PASS
  *       | BUILD {tileIndex} | SELL_HOUSE {tileIndex}
  *       | MORTGAGE {tileIndex} | UNMORTGAGE {tileIndex}
