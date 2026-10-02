@@ -240,19 +240,48 @@ function renderGame(g) {
     $("game-screen").classList.remove("hidden");
     if (!boardBuilt) buildBoard(g.tiles);
 
-    // сразу — только движение фишек и кубики
+    // Новый бросок: сначала катятся кубики, фишки и всё остальное ждут.
+    // Первая отрисовка (вход, перезагрузка) — без анимации старого броска.
+    if (seenRollNumber === null) seenRollNumber = g.rollNumber;
+    if (diceRolling) {
+        pendingGame = g; // покажем самое свежее, когда кубики остановятся
+        return;
+    }
+    if (g.lastRoll && g.rollNumber !== seenRollNumber) {
+        seenRollNumber = g.rollNumber;
+        pendingGame = g;
+        lockCenter();
+        rollDice(g.lastRoll, () => {
+            const latest = pendingGame;
+            pendingGame = null;
+            renderGame(latest);
+        });
+        return;
+    }
+
+    // затем — движение фишек
     renderPieces(g, colorsOf(g));
-    $("dice").textContent = g.lastRoll ? DICE_FACES[g.lastRoll.first] + " " + DICE_FACES[g.lastRoll.second] : "";
+    showDice(g.lastRoll);
 
     // Пока фишка идёт, результат хода (кнопки, карточка, аренда, деньги, журнал) не показываем
     // и с полем взаимодействовать нельзя. Дойдёт — отрисуем самое свежее состояние.
     if (anyPieceWalking()) {
         pendingGame = g;
-        document.body.classList.add("animating");
-        $("center").inert = true; // и мышь, и клавиатура (Enter на кнопке «Бросить»)
+        lockCenter();
         return;
     }
+    unlockCenter();
     renderDetails(g);
+}
+
+function lockCenter() {
+    document.body.classList.add("animating");
+    $("center").inert = true; // и мышь, и клавиатура (Enter на кнопке «Бросить»)
+}
+
+function unlockCenter() {
+    document.body.classList.remove("animating");
+    $("center").inert = false;
 }
 
 /** Вызывается, когда фишка закончила путь: если ждали — показать отложенное состояние. */
@@ -260,9 +289,58 @@ function onPieceArrived() {
     if (anyPieceWalking() || !pendingGame) return;
     const g = pendingGame;
     pendingGame = null;
-    document.body.classList.remove("animating");
-    $("center").inert = false;
-    renderDetails(g);
+    renderGame(g);
+}
+
+// ---------------------------------------------------------------- кубики
+
+/** Сколько «катятся» кубики, прежде чем остановиться. */
+const DICE_ROLL_MS = 800;
+const DICE_LAND_MS = 260;
+/** Номер последнего показанного броска (с сервера); null — ещё ничего не показывали. */
+let seenRollNumber = null;
+let diceRolling = false;
+
+function showDice(r) {
+    $("die1").textContent = r ? DICE_FACES[r.first] : "";
+    $("die2").textContent = r ? DICE_FACES[r.second] : "";
+    const isDouble = !!r && r.first === r.second;
+    $("dice").classList.toggle("double", isDouble);
+    $("dice-note").textContent = isDouble ? "Дубль!" : "";
+}
+
+/** Кубики трясутся и мелькают гранями, затем останавливаются на выпавших значениях. */
+function rollDice(r, done) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        showDice(r);
+        done();
+        return;
+    }
+    diceRolling = true;
+    const dice = $("dice");
+    dice.classList.remove("double", "landed");
+    $("dice-note").textContent = "";
+    dice.classList.add("rolling");
+    const randomFace = () => DICE_FACES[1 + Math.floor(Math.random() * 6)];
+    const start = performance.now();
+    const flicker = () => {
+        if (performance.now() - start < DICE_ROLL_MS) {
+            $("die1").textContent = randomFace();
+            $("die2").textContent = randomFace();
+            setTimeout(flicker, 70);
+            return;
+        }
+        dice.classList.remove("rolling");
+        showDice(r);
+        void dice.offsetWidth; // перезапуск анимации приземления
+        dice.classList.add("landed");
+        setTimeout(() => {
+            dice.classList.remove("landed");
+            diceRolling = false;
+            done();
+        }, DICE_LAND_MS);
+    };
+    flicker();
 }
 
 function colorsOf(g) {
