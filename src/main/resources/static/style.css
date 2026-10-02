@@ -202,6 +202,12 @@ body.animating #center input {
 .card-reveal-text { font-size: 17px; line-height: 1.35; font-weight: 600; }
 .card-reveal button { background: var(--card-color); border-color: var(--card-color); padding: 8px 22px; }
 .card-reveal-wait { color: var(--muted); font-size: 13px; }
+.card-reveal-wait:empty { display: none; }
+/* окно аренды: рамка и кнопка — цвета владельца (задаётся из JS) */
+.rent-due-tile { font-size: 18px; font-weight: 700; }
+.rent-due-owner { font-size: 14px; color: var(--muted); }
+.rent-due-amount { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.card-reveal.rent button { text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
 @keyframes card-in {
     from { opacity: 0; scale: .6; rotate: -6deg; }
     to { opacity: 1; scale: 1; rotate: 0deg; }
