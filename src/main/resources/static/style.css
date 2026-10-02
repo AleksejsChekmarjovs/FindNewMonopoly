@@ -170,6 +170,38 @@ body.animating #center input {
     opacity: .45;
 }
 
+/* ---- карточка клетки (по наведению) ---- */
+#tile-card {
+    position: fixed;
+    z-index: 15;
+    width: 230px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--tile);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .22);
+    font-size: 13px;
+}
+.tile-card-head { padding: 10px 12px; color: #fff; text-align: center; text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
+.tile-card-head.plain { background: var(--board); color: var(--ink); text-shadow: none; }
+.tile-card-title { font-weight: 700; font-size: 15px; }
+.tile-card-price { font-size: 12px; opacity: .9; }
+.tile-card-body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+.tile-card-section {
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+}
+.tile-card-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tile-card-table td { padding: 1px 4px; }
+.tile-card-table td:last-child { text-align: right; white-space: nowrap; }
+.tile-card-table tr.current { background: var(--board); font-weight: 700; }
+.tile-card-text { margin: 0; line-height: 1.4; }
+.tile-card-status { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
 /* кружок игрока в таблице игроков */
 .token {
     width: clamp(8px, 1.4vw, 14px);
