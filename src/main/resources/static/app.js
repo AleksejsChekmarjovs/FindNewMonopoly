@@ -444,14 +444,59 @@ function tileHoverEnd() {
 
 $("tile-card").addEventListener("mouseenter", () => clearTimeout(tileCardCloseTimer));
 $("tile-card").addEventListener("mouseleave", () => {
+    if (cardDrag) return; // во время перетаскивания курсор может обогнать карточку — не закрываем
     tileCardCloseTimer = setTimeout(closeTileCard, TILE_CARD_GRACE_MS);
 });
+
+// ---- перетаскивание карточки за шапку
+
+/** {pointerId, dx, dy} — смещение курсора от угла карточки, пока её тащат. */
+let cardDrag = null;
+
+$("tile-card").addEventListener("pointerdown", (e) => {
+    const head = e.target.closest(".tile-card-head");
+    if (!head || e.button !== 0) return;
+    const card = $("tile-card");
+    const r = card.getBoundingClientRect();
+    cardDrag = { pointerId: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    head.setPointerCapture(e.pointerId); // события идут в шапку, даже если курсор её обогнал
+    card.classList.add("dragging");
+    clearTimeout(tileCardCloseTimer);
+    e.preventDefault(); // без выделения текста
+});
+
+$("tile-card").addEventListener("pointermove", (e) => {
+    if (!cardDrag || e.pointerId !== cardDrag.pointerId) return;
+    const card = $("tile-card");
+    const { width, height } = viewportSize();
+    // карточку можно увести частично за край, но шапка остаётся видимой, чтобы её можно было вернуть
+    const left = Math.max(48 - card.offsetWidth, Math.min(e.clientX - cardDrag.dx, width - 48));
+    const top = Math.max(0, Math.min(e.clientY - cardDrag.dy, height - 32));
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+});
+
+function endCardDrag(e) {
+    if (!cardDrag || e.pointerId !== cardDrag.pointerId) return;
+    cardDrag = null;
+    $("tile-card").classList.remove("dragging");
+}
+
+$("tile-card").addEventListener("pointerup", endCardDrag);
+$("tile-card").addEventListener("pointercancel", endCardDrag);
+
+/** Видимая область без полос прокрутки (innerWidth/innerHeight их включают — низ карточки уходил под полосу). */
+function viewportSize() {
+    return { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight };
+}
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeTileCard();
 });
 
 function closeTileCard() {
     tileCardIndex = null;
+    cardDrag = null;
+    $("tile-card").classList.remove("dragging");
     $("tile-card").classList.add("hidden");
 }
 
@@ -468,14 +513,15 @@ function openTileCard(index) {
 /** Рядом с клеткой: справа, если не влезает — слева; по вертикали — в пределах окна. */
 function placeTileCard(card, tileEl) {
     const r = tileEl.getBoundingClientRect();
+    const { width, height } = viewportSize();
     const w = card.offsetWidth;
     const h = card.offsetHeight;
     const gap = 8;
     let left = r.right + gap;
-    if (left + w > window.innerWidth - gap) left = r.left - w - gap;
-    left = Math.max(gap, Math.min(left, window.innerWidth - w - gap));
+    if (left + w > width - gap) left = r.left - w - gap;
+    left = Math.max(gap, Math.min(left, width - w - gap));
     let top = r.top + r.height / 2 - h / 2;
-    top = Math.max(gap, Math.min(top, window.innerHeight - h - gap));
+    top = Math.max(gap, Math.min(top, height - h - gap));
     card.style.left = `${left}px`;
     card.style.top = `${top}px`;
 }

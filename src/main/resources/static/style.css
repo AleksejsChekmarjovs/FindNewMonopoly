@@ -181,12 +181,27 @@ body.animating #center input {
     border: 1px solid var(--line);
     box-shadow: 0 8px 24px rgb(0 0 0 / .22);
     font-size: 13px;
+    /* в низком окне карточка не выходит за экран — у неё появляется своя прокрутка */
+    max-height: calc(100vh - 16px);
+    display: flex;
+    flex-direction: column;
 }
-.tile-card-head { padding: 10px 12px; color: #fff; text-align: center; text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
+.tile-card-head {
+    padding: 10px 12px;
+    color: #fff;
+    text-align: center;
+    text-shadow: 0 1px 2px rgb(0 0 0 / .45);
+    flex: none;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+#tile-card.dragging { box-shadow: 0 14px 32px rgb(0 0 0 / .3); }
+#tile-card.dragging .tile-card-head { cursor: grabbing; }
 .tile-card-head.plain { background: var(--board); color: var(--ink); text-shadow: none; }
 .tile-card-title { font-weight: 700; font-size: 15px; }
 .tile-card-price { font-size: 12px; opacity: .9; }
-.tile-card-body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+.tile-card-body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; }
 .tile-card-section {
     margin-top: 4px;
     font-size: 11px;
