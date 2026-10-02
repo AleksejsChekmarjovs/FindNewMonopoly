@@ -25,6 +25,7 @@ public record GameView(
         Debt debt,
         PaymentDue paymentDue,
         TradeOffer trade,
+        TradeRules tradeRules,
         Game.Timers timers,
         String winnerId,
         List<String> log
@@ -40,6 +41,12 @@ public record GameView(
     public record AuctionView(int tileIndex, int highestBid, String highestBidderId,
                               String currentBidderId, List<String> bidders) {
     }
+
+    /** Правила оценки обмена — клиент считает суммы и блокирует неравный обмен по тем же числам. */
+    public record TradeRules(int maxRatio, int jailCardValue) {
+    }
+
+    private static final TradeRules TRADE_RULES = new TradeRules(Game.MAX_TRADE_RATIO, Game.JAIL_CARD_TRADE_VALUE);
 
     private static final Map<ColorGroup, Integer> HOUSE_COSTS = Arrays.stream(ColorGroup.values())
             .collect(Collectors.toMap(g -> g, ColorGroup::houseCost));
@@ -69,6 +76,7 @@ public record GameView(
                 game.currentDebt(),
                 game.paymentDue(),
                 game.trade(),
+                TRADE_RULES,
                 game.timers(),
                 game.winnerId(),
                 game.log()

@@ -434,6 +434,17 @@ body.animating #center input {
 .trade-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
 .trade-field input { width: 120px; }
 .trade-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.trade-tile-price { margin-left: auto; padding-left: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.trade-total { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.trade-balance {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--board);
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.trade-balance.bad { background: rgb(179 38 30 / .1); color: var(--danger); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 @media (max-width: 520px) {
     .trade-columns { grid-template-columns: 1fr; }

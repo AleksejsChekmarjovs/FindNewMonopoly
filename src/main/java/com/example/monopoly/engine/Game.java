@@ -36,6 +36,10 @@ public class Game {
     /** На расплату с долгом игроку, чей сейчас не ход. Истекло — автоматическая продажа и залог. */
     public static final Duration DEBT_TIME = Duration.ofMinutes(1);
     public static final int MAX_TRADES_PER_TURN = 3;
+    /** Обмен запрещён, если одна сторона стоит в столько раз больше другой (или ещё больше). */
+    public static final int MAX_TRADE_RATIO = 2;
+    /** Цена карточки «Освободиться из тюрьмы» при оценке обмена — столько стоит выход из тюрьмы. */
+    public static final int JAIL_CARD_TRADE_VALUE = JAIL_FINE;
 
     private final Board board = new Board();
     private final Clock clock;
@@ -654,6 +658,14 @@ public class Game {
         }
         validateTradeTiles(offer.giveTiles(), from);
         validateTradeTiles(offer.takeTiles(), to);
+
+        // Защита от «подарков» и явно грабительских сделок: стороны не должны отличаться в 2 раза и больше
+        int give = tradeValue(offer.giveTiles(), offer.giveMoney(), offer.giveJailCards());
+        int take = tradeValue(offer.takeTiles(), offer.takeMoney(), offer.takeJailCards());
+        if (Math.max(give, take) >= MAX_TRADE_RATIO * Math.min(give, take)) {
+            throw new GameException("Неравный обмен: $" + give + " против $" + take
+                    + " — стороны не должны отличаться в " + MAX_TRADE_RATIO + " раза и больше");
+        }
     }
 
     private void validateTradeTiles(List<Integer> tiles, Player owner) {
@@ -672,6 +684,11 @@ public class Game {
                 throw new GameException(tile.name() + ": сначала продайте постройки на улицах этого цвета");
             }
         }
+    }
+
+    /** Оценка одной стороны обмена: цены клеток + деньги + карточки выхода из тюрьмы. */
+    public int tradeValue(List<Integer> tiles, int money, int jailCards) {
+        return tiles.stream().mapToInt(i -> board.tile(i).price()).sum() + money + jailCards * JAIL_CARD_TRADE_VALUE;
     }
 
     /** 10% от залога за каждую полученную заложенную клетку (с округлением вверх, как при выкупе). */
