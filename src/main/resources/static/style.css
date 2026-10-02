@@ -170,6 +170,46 @@ body.animating #center input {
     opacity: .45;
 }
 
+/* ---- открытая карточка «Шанс»/«Казна» по центру доски ---- */
+.card-reveal {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    z-index: 4;
+    width: min(340px, 60%);
+    padding: 18px 20px 16px;
+    border-radius: 14px;
+    background: var(--tile);
+    border: 3px solid var(--card-color);
+    box-shadow: 0 16px 40px rgb(0 0 0 / .3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    animation: card-in 380ms ease-out;
+}
+.card-reveal.chance { --card-color: var(--orange); }
+.card-reveal.community_chest { --card-color: var(--dark_blue); }
+.card-reveal-deck {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--card-color);
+}
+.card-reveal-text { font-size: 17px; line-height: 1.35; font-weight: 600; }
+.card-reveal button { background: var(--card-color); border-color: var(--card-color); padding: 8px 22px; }
+.card-reveal-wait { color: var(--muted); font-size: 13px; }
+@keyframes card-in {
+    from { opacity: 0; scale: .6; rotate: -6deg; }
+    to { opacity: 1; scale: 1; rotate: 0deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .card-reveal { animation: none; }
+}
+
 /* ---- карточка клетки (по наведению) ---- */
 #tile-card {
     position: fixed;

@@ -27,7 +27,7 @@ class MortgageTest {
     /** Alice ходит на налог (4) и завершает ход — Bob готов бросать. */
     private void passAliceTurn(Game g) {
         dice.then(1, 3);
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.endTurn("a");
     }
 
@@ -84,7 +84,7 @@ class MortgageTest {
         passAliceTurn(game);
 
         dice.then(2, 3); // Bob -> 5 Reading
-        game.roll("b");
+        TestMoves.roll(game, "b");
 
         assertThat(bob.money()).isEqualTo(1500);
         assertThat(game.phase()).isEqualTo(TurnPhase.TURN_END);
@@ -94,7 +94,7 @@ class MortgageTest {
     void cannotManagePropertyDuringAuction() {
         game.setOwner(READING, "a");
         dice.then(1, 2); // Alice -> 3 Baltic
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.declineBuy("a");
 
         assertThatThrownBy(() -> game.mortgage("a", READING)).hasMessageContaining("аукциона");
@@ -107,7 +107,7 @@ class MortgageTest {
         g.setOwner(READING, "p");
 
         dice.then(1, 2); // -> 3 Baltic, $60 при $50
-        g.roll("p");
+        TestMoves.roll(g, "p");
         g.mortgage("p", READING); // +$100
         g.buy("p");
 
@@ -156,7 +156,7 @@ class MortgageTest {
         g.mortgage("a", BALTIC); // $40
 
         dice.then(1, 3); // налог $200 — не покрыть ничем
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.owners()).doesNotContainKey(BALTIC);
@@ -175,7 +175,7 @@ class MortgageTest {
         g.mortgage("a", BALTIC); // $40
 
         dice.then(2, 3); // Alice -> 5 Reading, долг не покрыть
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.owners()).containsEntry(BALTIC, "b");

@@ -14,6 +14,8 @@ package com.example.monopoly.engine;
 public enum TurnPhase {
     WAITING_FOR_ROLL,
     AWAITING_BUY_DECISION,
+    /** Игрок попал на «Шанс» или «Казну»: карточка открыта всем, выполнится, когда он её закроет. */
+    CARD_REVEAL,
     /** Торги за клетку; ходит не текущий игрок, а {@link Auction#currentBidderId()}. */
     AUCTION,
     /**

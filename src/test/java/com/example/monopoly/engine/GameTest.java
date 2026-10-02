@@ -23,7 +23,7 @@ class GameTest {
     @Test
     void landingOnFreeStreetOffersPurchase() {
         dice.then(1, 2); // -> 3 Baltic Ave
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(alice.position()).isEqualTo(3);
         assertThat(game.phase()).isEqualTo(TurnPhase.AWAITING_BUY_DECISION);
@@ -38,7 +38,7 @@ class GameTest {
     @Test
     void decliningLeavesStreetUnowned() {
         dice.then(1, 2);
-        game.roll("a");
+        TestMoves.roll(game, "a");
         TestMoves.declineAndNobodyBids(game, "a");
 
         assertThat(game.owners()).doesNotContainKey(3);
@@ -47,7 +47,7 @@ class GameTest {
 
     @Test
     void cannotActOutOfTurn() {
-        assertThatThrownBy(() -> game.roll("b"))
+        assertThatThrownBy(() -> TestMoves.roll(game, "b"))
                 .isInstanceOf(GameException.class)
                 .hasMessageContaining("не ваш ход");
     }
@@ -60,7 +60,7 @@ class GameTest {
     @Test
     void turnPassesToNextPlayer() {
         dice.then(1, 3); // -> 4 налог
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.endTurn("a");
 
         assertThat(game.current()).isSameAs(bob);
@@ -70,7 +70,7 @@ class GameTest {
     @Test
     void incomeTaxIsPaid() {
         dice.then(1, 3); // -> 4 Подоходный налог
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(alice.money()).isEqualTo(1500 - 200);
     }
@@ -84,7 +84,7 @@ class GameTest {
         playAliceTurn(6, 5);   // 32 North Carolina
         playBobTurn(1, 3);
         dice.then(4, 5);       // 41 -> 1 Mediterranean, через Старт
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(alice.position()).isEqualTo(1);
         assertThat(alice.money()).isEqualTo(1500 + Game.GO_SALARY);
@@ -93,12 +93,12 @@ class GameTest {
     @Test
     void rentIsPaidToOwner() {
         dice.then(1, 2); // Alice -> 3 Baltic, покупает
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.buy("a");
         game.endTurn("a");
 
         dice.then(1, 2); // Bob -> 3 Baltic
-        game.roll("b");
+        TestMoves.roll(game, "b");
 
         assertThat(bob.money()).isEqualTo(1500 - 4);
         assertThat(alice.money()).isEqualTo(1500 - 60 + 4);
@@ -109,7 +109,7 @@ class GameTest {
         Tile baltic = game.board().tile(3);
 
         dice.then(1, 2);        // Alice -> 3 Baltic, покупает
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.buy("a");
         game.endTurn("a");
         assertThat(game.rentFor(baltic)).isEqualTo(4);
@@ -122,7 +122,7 @@ class GameTest {
         playAliceTurn(5, 6);    // Alice -> 36
         playBobTurn(1, 3);      // Bob -> 16
         dice.then(1, 4);        // Alice -> 41 = 1 Mediterranean, покупает
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.buy("a");
 
         assertThat(game.rentFor(baltic)).isEqualTo(8);
@@ -131,12 +131,12 @@ class GameTest {
     @Test
     void railroadRentGrowsWithCount() {
         dice.then(2, 3); // Alice -> 5 Reading Railroad
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.buy("a");
         game.endTurn("a");
 
         dice.then(2, 3); // Bob -> 5
-        game.roll("b");
+        TestMoves.roll(game, "b");
 
         assertThat(bob.money()).isEqualTo(1500 - 25);
     }
@@ -144,7 +144,7 @@ class GameTest {
     @Test
     void doublesGiveExtraRoll() {
         dice.then(2, 2); // -> 4 налог
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(game.phase()).isEqualTo(TurnPhase.WAITING_FOR_ROLL);
         assertThat(game.current()).isSameAs(alice);
@@ -153,10 +153,10 @@ class GameTest {
     @Test
     void threeDoublesInRowSendToJail() {
         dice.then(1, 1).then(2, 2).then(3, 3);
-        game.roll("a"); // 2 Казна
-        game.roll("a"); // 6 Oriental
+        TestMoves.roll(game, "a"); // 2 Казна
+        TestMoves.roll(game, "a"); // 6 Oriental
         TestMoves.declineAndNobodyBids(game, "a");
-        game.roll("a"); // третий дубль
+        TestMoves.roll(game, "a"); // третий дубль
 
         assertThat(alice.inJail()).isTrue();
         assertThat(alice.position()).isEqualTo(Board.JAIL_INDEX);
@@ -171,7 +171,7 @@ class GameTest {
         playAliceTurn(6, 4);
         playBobTurn(1, 3);
         dice.then(4, 5);
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(alice.inJail()).isTrue();
         assertThat(alice.position()).isEqualTo(Board.JAIL_INDEX);
@@ -186,7 +186,7 @@ class GameTest {
         assertThat(alice.money()).isEqualTo(1500 - Game.JAIL_FINE);
 
         dice.then(1, 2);
-        game.roll("a");
+        TestMoves.roll(game, "a");
         assertThat(alice.position()).isEqualTo(13);
     }
 
@@ -195,7 +195,7 @@ class GameTest {
         sendAliceToJail();
 
         dice.then(3, 3);
-        game.roll("a"); // -> 16 St. James
+        TestMoves.roll(game, "a"); // -> 16 St. James
         TestMoves.declineAndNobodyBids(game, "a");
 
         assertThat(alice.inJail()).isFalse();
@@ -208,13 +208,13 @@ class GameTest {
         sendAliceToJail();
         for (int i = 0; i < 2; i++) {
             dice.then(1, 2);
-            game.roll("a");
+            TestMoves.roll(game, "a");
             assertThat(alice.inJail()).isTrue();
             game.endTurn("a");
             playBobTurn(1, 3);
         }
         dice.then(1, 2); // третья попытка — платит 50 и идёт на 13
-        game.roll("a");
+        TestMoves.roll(game, "a");
 
         assertThat(alice.inJail()).isFalse();
         assertThat(alice.position()).isEqualTo(13);
@@ -228,7 +228,7 @@ class GameTest {
         Game g = newGame(poor, rich);
 
         dice.then(1, 3); // налог 200 при 100 на счету
-        g.roll("p");
+        TestMoves.roll(g, "p");
 
         assertThat(poor.bankrupt()).isTrue();
         assertThat(g.phase()).isEqualTo(TurnPhase.GAME_OVER);
@@ -248,7 +248,7 @@ class GameTest {
     /** Ход без дубля: бросок, отказ от покупки при необходимости, конец хода. */
     private void playTurn(String id, int d1, int d2) {
         dice.then(d1, d2);
-        game.roll(id);
+        TestMoves.roll(game, id);
         if (game.phase() == TurnPhase.AWAITING_BUY_DECISION) {
             TestMoves.declineAndNobodyBids(game, id);
         }
@@ -257,10 +257,10 @@ class GameTest {
 
     private void sendAliceToJail() {
         dice.then(1, 1).then(2, 2).then(3, 3);
-        game.roll("a");
-        game.roll("a");
+        TestMoves.roll(game, "a");
+        TestMoves.roll(game, "a");
         TestMoves.declineAndNobodyBids(game, "a");
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.endTurn("a");
         playBobTurn(1, 3);
     }

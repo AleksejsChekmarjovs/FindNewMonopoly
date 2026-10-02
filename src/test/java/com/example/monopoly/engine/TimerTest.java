@@ -65,7 +65,7 @@ class TimerTest {
     void extraRollsShareTheSameTurnClock() {
         Game g = newGame(alice, bob);
         dice.then(2, 2);   // дубль -> 4, ещё бросок
-        g.roll("a");
+        TestMoves.roll(g, "a");
         clock.advance(ofMinutes(2).plusSeconds(59));
         assertThat(g.tick()).isFalse();
 
@@ -81,7 +81,7 @@ class TimerTest {
     void timeoutDeclinesPurchaseAndAuctionRunsOnItsOwnTimer() {
         Game g = newGame(alice, bob);
         dice.then(1, 2); // -> 3 Baltic
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         clock.advance(ofMinutes(3));
         g.tick(); // отказ от покупки -> аукцион, часы хода стоят
@@ -97,7 +97,7 @@ class TimerTest {
     void silentBiddersPassAfterThirtySeconds() {
         Game g = newGame(alice, bob);
         dice.then(1, 2); // -> 3 Baltic
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.declineBuy("a");
         g.bid("b", 10);   // очередь Alice
 
@@ -114,7 +114,7 @@ class TimerTest {
     void eachBidGetsFreshTime() {
         Game g = newGame(alice, bob);
         dice.then(1, 2);
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.declineBuy("a");
 
         clock.advance(ofSeconds(25));
@@ -161,10 +161,10 @@ class TimerTest {
 
         // в следующий ход у Alice снова 3 попытки
         dice.then(1, 3);
-        g.roll("a");
+        TestMoves.roll(g, "a");
         g.endTurn("a");
         dice.then(1, 3);
-        g.roll("b");
+        TestMoves.roll(g, "b");
         g.endTurn("b");
         g.proposeTrade(smallOffer());
         assertThat(g.timers().tradesLeft()).isEqualTo(2);
@@ -189,7 +189,7 @@ class TimerTest {
         Game g = newGame(poor, bob);
         g.setOwner(READING, "a");
         dice.then(1, 3); // налог $200 при $150
-        g.roll("a");
+        TestMoves.roll(g, "a");
         assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
         assertThat(g.timers().turnClockRunning()).isTrue();
 
@@ -209,7 +209,7 @@ class TimerTest {
                 alice, poorBob);
         g.setOwner(BALTIC, "b");
         dice.then(1, 1); // Alice -> 2 Казна, дубль
-        g.roll("a");
+        TestMoves.roll(g, "a");
         assertThat(g.timers().waitingForId()).isEqualTo("b");
         assertThat(g.timers().turnClockRunning()).isFalse();
 

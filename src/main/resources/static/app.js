@@ -301,6 +301,8 @@ function renderDetails(g) {
         $("status").textContent = g.trade.toId === me.playerId ? "Вам предлагают обмен"
             : g.trade.fromId === me.playerId ? "Ждём ответа на предложение обмена"
             : `${nameOf(g.trade.fromId)} предлагает обмен игроку ${nameOf(g.trade.toId)}`;
+    } else if (g.phase === "CARD_REVEAL") {
+        $("status").textContent = myTurn ? "Прочитайте карточку и закройте её" : `${current.name} читает карточку`;
     } else if (g.phase === "PAYING_DEBT") {
         $("status").textContent = g.debt.debtorId === me.playerId
             ? "Вам не хватает денег — расплатитесь с долгом"
@@ -309,10 +311,13 @@ function renderDetails(g) {
         $("status").textContent = myTurn ? "Ваш ход" : `Ходит ${current.name}`;
     }
 
-    // последняя вытянутая карточка
+    renderCardReveal(g, current, myTurn);
+
+    // последняя вытянутая карточка (пока она открыта крупно по центру — маленькую не показываем)
     const card = $("card");
-    card.classList.toggle("hidden", !g.lastCard);
-    if (g.lastCard) {
+    const showLast = !!g.lastCard && g.phase !== "CARD_REVEAL";
+    card.classList.toggle("hidden", !showLast);
+    if (showLast) {
         card.className = g.lastCard.deck.toLowerCase();
         card.querySelector(".card-deck").textContent =
             g.lastCard.deck === "CHANCE" ? "Шанс" : "Общественная казна";
@@ -698,18 +703,17 @@ function walkPath(from, to, g, wentToJail) {
         }
     };
     if (wentToJail) {
-        // Броском дошли до «Отправляйтесь в тюрьму» или до «Шанса»/«Казны» с такой карточкой —
-        // сначала показываем путь туда, потом перелёт в тюрьму. Три дубля — перелёт прямо с места.
+        // Броском дошли до «Отправляйтесь в тюрьму» — сначала путь туда, потом перелёт в тюрьму.
+        // Карточка «в тюрьму» и три дубля — перелёт прямо с места (на «Шанс» фишка уже пришла отдельно).
         const r = g.lastRoll;
         const via = r ? (from + r.first + r.second) % BOARD_SIZE : -1;
-        const viaType = via >= 0 ? g.tiles[via].type : null;
-        const byCard = g.lastCard?.kind === "GO_TO_JAIL" && (viaType === "CHANCE" || viaType === "COMMUNITY_CHEST");
-        if (viaType === "GO_TO_JAIL" || byCard) forwardTo(via);
+        if (g.lastCard?.kind !== "GO_TO_JAIL" && via >= 0 && g.tiles[via].type === "GO_TO_JAIL") forwardTo(via);
         steps.push({ to, fly: true });
         return steps;
     }
-    if (g.lastCard?.kind === "MOVE_BACK") {
-        // дошли до «Шанса», а карточка вернула на 3 клетки назад
+    // Пока карточка только открыта, фишка идёт на «Шанс» обычным ходом; «назад на 3» — уже после закрытия
+    if (g.lastCard?.kind === "MOVE_BACK" && g.phase !== "CARD_REVEAL") {
+        // стоим на «Шансе», карточка вернула на 3 клетки назад
         forwardTo((to + 3) % BOARD_SIZE);
         while (at !== to) {
             at = (at - 1 + BOARD_SIZE) % BOARD_SIZE;
@@ -1015,6 +1019,30 @@ function renderTradeOffer(g, nameOf) {
 $("trade-accept-btn").onclick = () => send({ type: "ACCEPT_TRADE" });
 $("trade-reject-btn").onclick = () => send({ type: "REJECT_TRADE" });
 $("trade-cancel-btn").onclick = () => send({ type: "CANCEL_TRADE" });
+
+/**
+ * Открытая карточка «Шанс»/«Казна» по центру доски — у всех игроков. Закрыть может только вытянувший;
+ * после закрытия сервер выполняет карточку (фишка пойдёт дальше, деньги спишутся и т.п.).
+ */
+function renderCardReveal(g, current, myTurn) {
+    const box = $("card-reveal");
+    const open = g.phase === "CARD_REVEAL" && !!g.lastCard;
+    box.classList.toggle("hidden", !open);
+    if (!open) return;
+    box.className = "card-reveal " + g.lastCard.deck.toLowerCase();
+    $("card-reveal-deck").textContent = g.lastCard.deck === "CHANCE" ? "Шанс" : "Общественная казна";
+    $("card-reveal-text").textContent = g.lastCard.text;
+    $("card-reveal-close").classList.toggle("hidden", !myTurn);
+    $("card-reveal-wait").classList.toggle("hidden", myTurn);
+    $("card-reveal-wait").textContent = `Ждём, пока ${current.name} закроет карточку`;
+    if (myTurn) $("card-reveal-close").focus();
+}
+
+$("card-reveal-close").onclick = () => {
+    // скрываем сразу: дальше фишка пойдёт выполнять карточку, а остальной интерфейс обновится, когда она дойдёт
+    $("card-reveal").classList.add("hidden");
+    send({ type: "CLOSE_CARD" });
+};
 
 /** Панель долга: видна всем, кнопки — только должнику. */
 function renderDebt(g, nameOf) {

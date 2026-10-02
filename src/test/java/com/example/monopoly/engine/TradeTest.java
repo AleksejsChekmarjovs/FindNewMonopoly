@@ -82,7 +82,7 @@ class TradeTest {
     @Test
     void tradeAtEndOfTurnReturnsToTurnEnd() {
         dice.then(1, 3); // налог
-        game.roll("a");
+        TestMoves.roll(game, "a");
         game.setOwner(BALTIC, "b");
 
         game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 50, 0));
@@ -97,7 +97,7 @@ class TradeTest {
         Game g = new Game(List.of(alice, bob), dice, chance,
                 new Deck(List.of(Card.of(DeckType.COMMUNITY_CHEST, "ничего", Card.Kind.GAIN, 0))));
         dice.then(3, 4); // Alice -> 7 Шанс: карточка
-        g.roll("a");
+        TestMoves.roll(g, "a");
 
         g.proposeTrade(new TradeOffer("a", "b", List.of(), List.of(), 0, 30, 1, 0));
         g.acceptTrade("b");
@@ -133,7 +133,7 @@ class TradeTest {
                 .hasMessageContaining("в свой ход");
 
         dice.then(1, 5); // -> 6 Oriental, решение о покупке
-        game.roll("a");
+        TestMoves.roll(game, "a");
         assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(BALTIC), List.of(), 0, 10)))
                 .hasMessageContaining("до броска");
     }
@@ -195,7 +195,7 @@ class TradeTest {
         game.setOwner(MEDITERRANEAN, "a");
         game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 50, 0));
 
-        assertThatThrownBy(() -> game.roll("a")).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> TestMoves.roll(game, "a")).isInstanceOf(GameException.class);
         assertThatThrownBy(() -> game.mortgage("a", MEDITERRANEAN)).hasMessageContaining("Дождитесь ответа");
         assertThatThrownBy(() -> game.proposeTrade(offer("c", List.of(), List.of(), 10, 0)))
                 .isInstanceOf(GameException.class);
