@@ -306,7 +306,38 @@ body.animating #center input {
     overflow: hidden;
 }
 #status { font-weight: 600; font-size: 15px; }
-#dice { font-size: 28px; line-height: 1; min-height: 28px; }
+#dice {
+    font-size: 28px;
+    line-height: 1;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.die { display: inline-block; transform-origin: 50% 55%; }
+#dice-note { font-size: 13px; font-weight: 700; color: var(--accent); margin-left: 6px; }
+/* бросок: кубики трясутся и кувыркаются, второй — со сдвигом, чтобы не синхронно */
+#dice.rolling .die { animation: tumble 260ms linear infinite; }
+#dice.rolling .die + .die { animation-duration: 220ms; animation-direction: reverse; }
+@keyframes tumble {
+    0% { translate: 0 0; rotate: 0deg; }
+    25% { translate: 3px -5px; rotate: 90deg; }
+    50% { translate: -2px 0; rotate: 180deg; }
+    75% { translate: 2px -3px; rotate: 270deg; }
+    100% { translate: 0 0; rotate: 360deg; }
+}
+/* остановка: короткий отскок */
+#dice.landed .die { animation: land 260ms ease-out; }
+@keyframes land {
+    0% { scale: 1.35; }
+    60% { scale: .9; }
+    100% { scale: 1; }
+}
+/* дубль — кубики подсвечены */
+#dice.double .die { color: var(--accent); text-shadow: 0 0 8px rgb(31 122 77 / .45); }
+@media (prefers-reduced-motion: reduce) {
+    #dice.rolling .die, #dice.landed .die { animation: none; }
+}
 #card {
     padding: 8px 10px;
     border-radius: 8px;
@@ -516,5 +547,5 @@ body.animating #center input {
 @media (max-width: 700px) {
     body { padding: 8px; }
     #center { padding: 6px; font-size: 11px; }
-    #dice { font-size: 18px; min-height: 18px; }
+    #dice { font-size: 20px; min-height: 20px; }
 }

@@ -56,6 +56,8 @@ public class Game {
     private int currentIndex = 0;
     private TurnPhase phase = TurnPhase.WAITING_FOR_ROLL;
     private DiceRoll lastRoll;
+    /** Номер броска хода — по нему клиент отличает новый бросок от старого (значения могут совпасть). */
+    private int rollNumber = 0;
     private Card lastCard;
     private Auction auction;
     private int doublesInRow = 0;
@@ -122,6 +124,7 @@ public class Game {
     private void doRoll(String playerId) {
         Player p = requireTurn(playerId, TurnPhase.WAITING_FOR_ROLL);
         DiceRoll roll = dice.roll();
+        rollNumber++;
         lastRoll = roll;
         lastCard = null;
         extraRoll = false;
@@ -1250,6 +1253,7 @@ public class Game {
     public List<Player> players() { return List.copyOf(players); }
     public Map<Integer, String> owners() { return Map.copyOf(owners); }
     public DiceRoll lastRoll() { return lastRoll; }
+    public int rollNumber() { return rollNumber; }
     public Card lastCard() { return lastCard; }
     public Auction auction() { return auction; }
     public Map<Integer, Integer> buildings() { return Map.copyOf(buildings); }
