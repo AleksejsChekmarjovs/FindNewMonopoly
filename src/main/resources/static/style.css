@@ -307,9 +307,9 @@ body.animating #center input {
 }
 #status { font-weight: 600; font-size: 15px; }
 #dice {
-    font-size: 28px;
+    font-size: 56px;
     line-height: 1;
-    min-height: 28px;
+    min-height: 56px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -321,9 +321,9 @@ body.animating #center input {
 #dice.rolling .die + .die { animation-duration: 220ms; animation-direction: reverse; }
 @keyframes tumble {
     0% { translate: 0 0; rotate: 0deg; }
-    25% { translate: 3px -5px; rotate: 90deg; }
-    50% { translate: -2px 0; rotate: 180deg; }
-    75% { translate: 2px -3px; rotate: 270deg; }
+    25% { translate: 6px -10px; rotate: 90deg; }
+    50% { translate: -4px 0; rotate: 180deg; }
+    75% { translate: 4px -6px; rotate: 270deg; }
     100% { translate: 0 0; rotate: 360deg; }
 }
 /* остановка: короткий отскок */
@@ -547,5 +547,5 @@ body.animating #center input {
 @media (max-width: 700px) {
     body { padding: 8px; }
     #center { padding: 6px; font-size: 11px; }
-    #dice { font-size: 20px; min-height: 20px; }
+    #dice { font-size: 40px; min-height: 40px; }
 }
