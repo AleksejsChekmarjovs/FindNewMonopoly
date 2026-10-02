@@ -163,6 +163,13 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
     .piece.hop, .piece.fly, .piece.current { animation: none; }
 }
 
+/* пока фишка идёт — кнопки и поля ввода неактивны (результат хода ещё не показан) */
+body.animating #center button,
+body.animating #center input {
+    pointer-events: none;
+    opacity: .45;
+}
+
 /* кружок игрока в таблице игроков */
 .token {
     width: clamp(8px, 1.4vw, 14px);
