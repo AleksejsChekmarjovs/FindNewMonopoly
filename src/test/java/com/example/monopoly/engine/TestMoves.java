@@ -14,15 +14,15 @@ final class TestMoves {
 
     /**
      * Бросок, после которого игрок сразу делает то, о чём его спрашивают окна:
-     * закрывает карточку «Шанс»/«Казна» (она выполняется) и платит аренду.
+     * закрывает карточку «Шанс»/«Казна» (она выполняется) и платит аренду или налог.
      */
     static void roll(Game g, String playerId) {
         g.roll(playerId);
-        while (g.phase() == TurnPhase.CARD_REVEAL || g.phase() == TurnPhase.RENT_DUE) {
+        while (g.phase() == TurnPhase.CARD_REVEAL || g.phase() == TurnPhase.PAYMENT_DUE) {
             if (g.phase() == TurnPhase.CARD_REVEAL) {
                 g.closeCard(g.current().id());
             } else {
-                g.payRent(g.current().id());
+                g.payDue(g.current().id());
             }
         }
     }

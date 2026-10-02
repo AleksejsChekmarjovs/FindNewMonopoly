@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Аренда сначала показывается всем и списывается, когда игрок нажмёт «Заплатить». Baltic Ave — клетка 3 (аренда $4). */
-class RentDueTest {
+class PaymentDueTest {
 
     private static final int BALTIC = 3;
 
@@ -33,16 +33,70 @@ class RentDueTest {
         dice.then(1, 2);
         g.roll("a");
 
-        assertThat(g.phase()).isEqualTo(TurnPhase.RENT_DUE);
-        assertThat(g.rentDue()).isEqualTo(new RentDue("b", BALTIC, 4));
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYMENT_DUE);
+        assertThat(g.paymentDue()).isEqualTo(new PaymentDue("b", BALTIC, 4));
         assertThat(alice.money()).isEqualTo(1500); // ещё не списано
 
-        g.payRent("a");
+        g.payDue("a");
 
         assertThat(alice.money()).isEqualTo(1496);
         assertThat(bob.money()).isEqualTo(1504);
-        assertThat(g.rentDue()).isNull();
+        assertThat(g.paymentDue()).isNull();
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
+    }
+
+    @Test
+    void incomeTaxIsShownAndPaidToBankOnButton() {
+        Game g = newGame(alice, bob);
+        dice.then(1, 3); // -> 4 «Подоходный налог»
+        g.roll("a");
+
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYMENT_DUE);
+        assertThat(g.paymentDue()).isEqualTo(new PaymentDue(null, 4, 200)); // получатель — банк
+        assertThat(alice.money()).isEqualTo(1500);
+
+        g.payDue("a");
+
+        assertThat(alice.money()).isEqualTo(1300);
+        assertThat(bob.money()).isEqualTo(1500);
+        assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
+    }
+
+    @Test
+    void luxuryTaxUsesItsOwnAmount() {
+        Game g = newGame(alice, bob);
+        for (int[] roll : new int[][]{{5, 6}, {6, 4}, {6, 5}}) { // 11, 21, 32 — по пути без налогов
+            dice.then(roll[0], roll[1]);
+            TestMoves.roll(g, "a");
+            if (g.phase() == TurnPhase.AWAITING_BUY_DECISION) {
+                TestMoves.declineAndNobodyBids(g, "a");
+            }
+            g.endTurn("a");
+            dice.then(1, 2);
+            TestMoves.roll(g, "b");
+            if (g.phase() == TurnPhase.AWAITING_BUY_DECISION) {
+                TestMoves.declineAndNobodyBids(g, "b");
+            }
+            g.endTurn("b");
+        }
+        dice.then(2, 4); // 32 -> 38 «Налог на роскошь»
+        g.roll("a");
+
+        assertThat(g.paymentDue()).isEqualTo(new PaymentDue(null, 38, 100));
+    }
+
+    @Test
+    void taxShortOfCashTurnsIntoDebtToBank() {
+        Player poor = new Player("a", "Alice", 150);
+        Game g = newGame(poor, bob);
+        g.setOwner(5, "a"); // $150 + залог $100 покрывают $200 — значит долг, а не банкротство
+        dice.then(1, 3);
+        g.roll("a");
+
+        g.payDue("a");
+
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
+        assertThat(g.currentDebt()).isEqualTo(new Debt("a", null, 200));
     }
 
     @Test
@@ -53,7 +107,7 @@ class RentDueTest {
         g.roll("a");
 
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
-        assertThat(g.rentDue()).isNull();
+        assertThat(g.paymentDue()).isNull();
     }
 
     @Test
@@ -62,17 +116,19 @@ class RentDueTest {
         g.setOwner(6, "b");      // Oriental Ave
         dice.then(1, 3);         // Alice -> 4 налог
         g.roll("a");
+        g.payDue("a");
         g.endTurn("a");
         g.mortgage("b", 6);      // Bob закладывает в свой ход
         dice.then(1, 3);         // Bob -> 4
         g.roll("b");
+        g.payDue("b");
         g.endTurn("b");
 
         dice.then(1, 1);         // Alice -> 6, заложенная клетка Bob (дубль — ещё бросок)
         g.roll("a");
 
         assertThat(g.phase()).isEqualTo(TurnPhase.WAITING_FOR_ROLL);
-        assertThat(g.rentDue()).isNull();
+        assertThat(g.paymentDue()).isNull();
         assertThat(alice.money()).isEqualTo(1500 - 200);
     }
 
@@ -83,7 +139,7 @@ class RentDueTest {
         dice.then(1, 2);
         g.roll("a");
 
-        assertThatThrownBy(() -> g.payRent("b")).hasMessageContaining("не ваш ход");
+        assertThatThrownBy(() -> g.payDue("b")).hasMessageContaining("не ваш ход");
         assertThatThrownBy(() -> g.endTurn("a")).isInstanceOf(GameException.class);
         assertThatThrownBy(() -> g.roll("a")).isInstanceOf(GameException.class);
     }
@@ -92,7 +148,7 @@ class RentDueTest {
     void cannotPayWhenNothingIsDue() {
         Game g = newGame(alice, bob);
 
-        assertThatThrownBy(() -> g.payRent("a")).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> g.payDue("a")).isInstanceOf(GameException.class);
     }
 
     @Test
@@ -103,9 +159,9 @@ class RentDueTest {
         g.setOwner(5, "a"); // есть что заложить — значит долг, а не банкротство
         dice.then(1, 2);
         g.roll("a");
-        assertThat(g.phase()).isEqualTo(TurnPhase.RENT_DUE);
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYMENT_DUE);
 
-        g.payRent("a");
+        g.payDue("a");
 
         assertThat(g.phase()).isEqualTo(TurnPhase.PAYING_DEBT);
         assertThat(g.currentDebt()).isEqualTo(new Debt("a", "b", 4));
@@ -119,8 +175,8 @@ class RentDueTest {
         g.roll("a");
         g.closeCard("a"); // -> 15, владелец Bob
 
-        assertThat(g.phase()).isEqualTo(TurnPhase.RENT_DUE);
-        assertThat(g.rentDue().amount()).isEqualTo(50);
+        assertThat(g.phase()).isEqualTo(TurnPhase.PAYMENT_DUE);
+        assertThat(g.paymentDue().amount()).isEqualTo(50);
     }
 
     @Test
