@@ -8,6 +8,8 @@ const $ = (id) => document.getElementById(id);
 let socket;
 let me = { playerId: null, roomId: null };
 let boardBuilt = false;
+/** Состояние, пришедшее во время анимации фишки: покажем, когда она дойдёт. */
+let pendingGame = null;
 /** Кто из игроков сейчас подключён (id). */
 let online = new Set();
 
@@ -234,10 +236,42 @@ function renderGame(g) {
     $("game-screen").classList.remove("hidden");
     if (!boardBuilt) buildBoard(g.tiles);
 
+    // сразу — только движение фишек и кубики
+    renderPieces(g, colorsOf(g));
+    $("dice").textContent = g.lastRoll ? DICE_FACES[g.lastRoll.first] + " " + DICE_FACES[g.lastRoll.second] : "";
+
+    // Пока фишка идёт, результат хода (кнопки, карточка, аренда, деньги, журнал) не показываем
+    // и с полем взаимодействовать нельзя. Дойдёт — отрисуем самое свежее состояние.
+    if (anyPieceWalking()) {
+        pendingGame = g;
+        document.body.classList.add("animating");
+        $("center").inert = true; // и мышь, и клавиатура (Enter на кнопке «Бросить»)
+        return;
+    }
+    renderDetails(g);
+}
+
+/** Вызывается, когда фишка закончила путь: если ждали — показать отложенное состояние. */
+function onPieceArrived() {
+    if (anyPieceWalking() || !pendingGame) return;
+    const g = pendingGame;
+    pendingGame = null;
+    document.body.classList.remove("animating");
+    $("center").inert = false;
+    renderDetails(g);
+}
+
+function colorsOf(g) {
     const colorOf = {};
     g.players.forEach((p, i) => (colorOf[p.id] = PLAYER_COLORS[i]));
+    return colorOf;
+}
 
-    // владельцы и фишки
+/** Всё, кроме фишек и кубиков: клетки, статус, кнопки, панели, игроки, журнал. */
+function renderDetails(g) {
+    const colorOf = colorsOf(g);
+
+    // владельцы и постройки
     for (const t of g.tiles) {
         const el = $("tile-" + t.index);
         const owner = g.owners[t.index];
@@ -247,7 +281,6 @@ function renderGame(g) {
         const slot = el.querySelector(".buildings");
         if (slot) slot.replaceChildren(...buildingIcons(g.buildings[t.index] || 0));
     }
-    renderPieces(g, colorOf);
 
     // статус и кубики
     const current = g.players.find((p) => p.id === g.currentPlayerId);
@@ -270,7 +303,6 @@ function renderGame(g) {
     } else {
         $("status").textContent = myTurn ? "Ваш ход" : `Ходит ${current.name}`;
     }
-    $("dice").textContent = g.lastRoll ? DICE_FACES[g.lastRoll.first] + " " + DICE_FACES[g.lastRoll.second] : "";
 
     // последняя вытянутая карточка
     const card = $("card");
@@ -453,6 +485,13 @@ function walkPath(from, to, g, wentToJail) {
     return steps;
 }
 
+function anyPieceWalking() {
+    for (const piece of pieces.values()) {
+        if (piece.timer) return true;
+    }
+    return false;
+}
+
 /** Перелёт в тюрьму через поле и пауза на клетке перед ним — чтобы было видно, откуда отправили. */
 const FLY_MS = 1000;
 const BEFORE_FLY_MS = 400;
@@ -468,6 +507,7 @@ function walk(piece, path) {
             piece.el.classList.remove("hop", "fly"); // вернуть пульсацию текущей фишки
             piece.el.style.transitionTimingFunction = "";
             layoutPieces();
+            onPieceArrived();
             return;
         }
         piece.shown = step.to;
