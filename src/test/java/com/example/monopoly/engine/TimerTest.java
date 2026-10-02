@@ -29,7 +29,7 @@ class TimerTest {
     }
 
     private static TradeOffer smallOffer() {
-        return new TradeOffer("a", "b", List.of(), List.of(), 10, 0, 0, 0);
+        return new TradeOffer("a", "b", List.of(), List.of(), 10, 10, 0, 0); // равноценно — только для проверки таймеров и лимита
     }
 
     // ---------------------------------------------------------------- время хода

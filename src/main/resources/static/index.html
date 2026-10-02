@@ -135,6 +135,7 @@
                 <label class="trade-field">Деньги, $ <input id="trade-give-money" type="number" min="0" value="0"></label>
                 <label class="trade-field" id="trade-give-cards-row">Карточки «выйти из тюрьмы»
                     <input id="trade-give-cards" type="number" min="0" value="0"></label>
+                <div class="trade-total">Итого: <b id="trade-give-total">$0</b></div>
             </div>
             <div class="trade-col">
                 <h4>Вы получаете</h4>
@@ -142,10 +143,12 @@
                 <label class="trade-field">Деньги, $ <input id="trade-take-money" type="number" min="0" value="0"></label>
                 <label class="trade-field" id="trade-take-cards-row">Карточки «выйти из тюрьмы»
                     <input id="trade-take-cards" type="number" min="0" value="0"></label>
+                <div class="trade-total">Итого: <b id="trade-take-total">$0</b></div>
             </div>
         </div>
+        <div id="trade-balance" class="trade-balance"></div>
         <p class="trade-hint">Улицы из групп с домами обменивать нельзя. За полученную заложенную клетку
-            сразу платится 10% от залога.</p>
+            сразу платится 10% от залога. Стоимость: клетки по цене покупки, деньги, карточка «выйти из тюрьмы» — $50.</p>
         <div class="modal-actions">
             <button id="trade-send-btn">Предложить</button>
             <button id="trade-close-btn" class="secondary">Закрыть</button>

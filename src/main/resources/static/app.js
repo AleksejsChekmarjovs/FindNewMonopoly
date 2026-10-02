@@ -999,6 +999,7 @@ function renderTradeEditor(g) {
     $("trade-take-cards").max = partner.jailFreeCards;
     $("trade-give-cards-row").classList.toggle("hidden", mePlayer.jailFreeCards === 0);
     $("trade-take-cards-row").classList.toggle("hidden", partner.jailFreeCards === 0);
+    updateTradeTotals(g);
 }
 
 /** Чекбоксы клеток игрока; выбор хранится в set, клетки, которых у игрока больше нет, из него убираются. */
@@ -1018,16 +1019,59 @@ function renderTradeTiles(g, container, ownerId, selected) {
         box.type = "checkbox";
         box.checked = selected.has(t.index);
         box.disabled = !tradable(g, t);
-        box.onchange = () => (box.checked ? selected.add(t.index) : selected.delete(t.index));
+        box.onchange = () => {
+            if (box.checked) selected.add(t.index); else selected.delete(t.index);
+            updateTradeTotals(g);
+        };
         const swatch = document.createElement("span");
         swatch.className = "swatch";
         swatch.style.background = t.group ? `var(--${t.group.toLowerCase()})` : "var(--line)";
         const name = document.createElement("span");
         name.textContent = t.name + (g.mortgaged.includes(t.index) ? " (залог)" : "")
             + (tradable(g, t) ? "" : " — есть дома в группе");
-        label.append(box, swatch, name);
+        const price = document.createElement("span");
+        price.className = "trade-tile-price";
+        price.textContent = `$${t.price}`;
+        label.append(box, swatch, name, price);
         return label;
     }));
+}
+
+/** Стоимость стороны обмена — как на сервере: цены клеток + деньги + карточки выхода из тюрьмы. */
+function tradeSideValue(g, tiles, money, cards) {
+    return tiles.reduce((sum, i) => sum + g.tiles[i].price, 0) + money + cards * g.tradeRules.jailCardValue;
+}
+
+/** Неравный обмен: одна сторона дороже другой в maxRatio раз и больше (в том числе «подарок» за $0). */
+function tradeUnbalanced(g, a, b) {
+    return Math.max(a, b) >= g.tradeRules.maxRatio * Math.min(a, b);
+}
+
+const tradeNum = (id) => Math.max(0, parseInt($(id).value, 10) || 0);
+
+/** Итоги под колонками и сравнение сторон; кнопка «Предложить» выключена, если обмен неравный или пустой. */
+function updateTradeTotals(g) {
+    const give = tradeSideValue(g, [...tradeDraft.give], tradeNum("trade-give-money"), tradeNum("trade-give-cards"));
+    const take = tradeSideValue(g, [...tradeDraft.take], tradeNum("trade-take-money"), tradeNum("trade-take-cards"));
+    $("trade-give-total").textContent = `$${give}`;
+    $("trade-take-total").textContent = `$${take}`;
+    const balance = $("trade-balance");
+    const empty = give === 0 && take === 0;
+    const bad = !empty && tradeUnbalanced(g, give, take);
+    balance.classList.toggle("bad", bad);
+    if (empty) {
+        balance.textContent = "Выберите, что отдаёте и что получаете";
+    } else if (bad) {
+        balance.textContent = `Неравный обмен: $${give} против $${take}. `
+            + `Стороны не должны отличаться в ${g.tradeRules.maxRatio} раза и больше.`;
+    } else {
+        balance.textContent = `Вы отдаёте на $${give}, получаете на $${take}`;
+    }
+    $("trade-send-btn").disabled = empty || bad;
+}
+
+for (const id of ["trade-give-money", "trade-take-money", "trade-give-cards", "trade-take-cards"]) {
+    $(id).addEventListener("input", () => lastGame && updateTradeTotals(lastGame));
 }
 
 function openTradeEditor() {
@@ -1091,8 +1135,12 @@ function renderTradeOffer(g, nameOf) {
     const from = nameOf(t.fromId);
     const to = nameOf(t.toId);
     $("trade-offer-title").textContent = `Обмен: ${from} → ${to}`;
-    $("trade-offer-give").textContent = `${from} отдаёт: ${side(t.giveTiles, t.giveMoney, t.giveJailCards)}`;
-    $("trade-offer-take").textContent = `${from} получает: ${side(t.takeTiles, t.takeMoney, t.takeJailCards)}`;
+    const giveValue = tradeSideValue(g, t.giveTiles, t.giveMoney, t.giveJailCards);
+    const takeValue = tradeSideValue(g, t.takeTiles, t.takeMoney, t.takeJailCards);
+    $("trade-offer-give").textContent =
+        `${from} отдаёт: ${side(t.giveTiles, t.giveMoney, t.giveJailCards)} — на $${giveValue}`;
+    $("trade-offer-take").textContent =
+        `${from} получает: ${side(t.takeTiles, t.takeMoney, t.takeJailCards)} — на $${takeValue}`;
     const hasMortgaged = [...t.giveTiles, ...t.takeTiles].some((i) => g.mortgaged.includes(i));
     $("trade-offer-note").textContent = hasMortgaged ? "За заложенные клетки получатель сразу платит 10% от залога." : "";
 

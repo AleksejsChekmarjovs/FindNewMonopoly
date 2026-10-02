@@ -31,15 +31,15 @@ class TradeTest {
         game.setOwner(MEDITERRANEAN, "a");
         game.setOwner(BALTIC, "b");
 
-        game.proposeTrade(offer("b", List.of(MEDITERRANEAN), List.of(BALTIC), 100, 0));
+        game.proposeTrade(offer("b", List.of(MEDITERRANEAN), List.of(BALTIC), 20, 0)); // $80 против $60
         assertThat(game.phase()).isEqualTo(TurnPhase.TRADE_OFFER);
         assertThat(game.trade().toId()).isEqualTo("b");
 
         game.acceptTrade("b");
 
         assertThat(game.owners()).containsEntry(MEDITERRANEAN, "b").containsEntry(BALTIC, "a");
-        assertThat(alice.money()).isEqualTo(1400);
-        assertThat(bob.money()).isEqualTo(1600);
+        assertThat(alice.money()).isEqualTo(1480);
+        assertThat(bob.money()).isEqualTo(1520);
         assertThat(game.trade()).isNull();
         assertThat(game.phase()).isEqualTo(TurnPhase.WAITING_FOR_ROLL);
     }
@@ -49,7 +49,7 @@ class TradeTest {
         game.setOwner(MEDITERRANEAN, "a");
         game.setOwner(BALTIC, "b");
 
-        game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 200, 0));
+        game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 100, 0)); // $100 против $60
         game.acceptTrade("b");
 
         game.buildHouse("a", BALTIC); // группа собрана — можно строить
@@ -114,13 +114,13 @@ class TradeTest {
         game.setOwner(BALTIC, "a");
         game.mortgage("a", BALTIC); // Alice +$30
 
-        game.proposeTrade(offer("b", List.of(BALTIC), List.of(), 0, 0));
+        game.proposeTrade(offer("b", List.of(BALTIC), List.of(), 0, 40)); // $60 против $40
         game.acceptTrade("b");
 
         assertThat(game.owners()).containsEntry(BALTIC, "b");
         assertThat(game.mortgaged()).contains(BALTIC);      // остаётся заложенной
-        assertThat(bob.money()).isEqualTo(1500 - 3);        // 10% от $30
-        assertThat(alice.money()).isEqualTo(1530);
+        assertThat(bob.money()).isEqualTo(1500 - 40 - 3);   // $40 Alice + 10% от залога $30
+        assertThat(alice.money()).isEqualTo(1530 + 40);
     }
 
     // ---------------------------------------------------------------- проверки
@@ -157,6 +157,36 @@ class TradeTest {
         // даже улицу без дома — дом стоит на соседней улице группы
         assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(BALTIC), List.of(), 0, 100)))
                 .hasMessageContaining("продайте постройки");
+    }
+
+    // ---------------------------------------------------------------- равноценность
+
+    @Test
+    void twiceAsValuableSideIsForbiddenJustUnderIsAllowed() {
+        game.setOwner(BALTIC, "b"); // $60
+
+        assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 120, 0)))
+                .hasMessageContaining("Неравный обмен: $120 против $60");
+        assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 30, 0)))
+                .hasMessageContaining("Неравный обмен");
+
+        game.proposeTrade(offer("b", List.of(), List.of(BALTIC), 119, 0));
+        assertThat(game.phase()).isEqualTo(TurnPhase.TRADE_OFFER);
+    }
+
+    @Test
+    void giftsAreForbidden() {
+        game.setOwner(BALTIC, "a");
+
+        assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(BALTIC), List.of(), 0, 0)))
+                .hasMessageContaining("Неравный обмен: $60 против $0");
+        assertThatThrownBy(() -> game.proposeTrade(offer("b", List.of(), List.of(), 10, 0)))
+                .hasMessageContaining("Неравный обмен");
+    }
+
+    @Test
+    void jailCardCountsAsFiftyDollars() {
+        assertThat(game.tradeValue(List.of(BALTIC, MEDITERRANEAN), 25, 1)).isEqualTo(60 + 60 + 25 + 50);
     }
 
     @Test
