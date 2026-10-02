@@ -778,6 +778,10 @@ public class Game {
             if (!raisesMoney) {
                 throw new GameException("Сначала расплатитесь с долгом");
             }
+            if (debts.peekFirst().debt().hopeless()) {
+                // продажа и залог уже ничего не изменят, а лишь заберут у кредитора имущество без залога
+                throw new GameException("Долг не покрыть — остаётся только объявить банкротство");
+            }
             return player(playerId);
         }
         if (!current().id().equals(playerId)) {
@@ -882,7 +886,7 @@ public class Game {
     // ------------------------------------------------------------------ платежи, долги, банкротство
 
     /** Результат попытки взять деньги с игрока. */
-    private enum Charge { PAID, DEBT, BANKRUPT }
+    private enum Charge { PAID, DEBT }
 
     /** Неоплаченный долг и что сделать сразу после его оплаты (например, ход после штрафа в тюрьме). */
     private record PendingDebt(Debt debt, Runnable afterPaid) {
@@ -901,9 +905,10 @@ public class Game {
      *   <li>хватает наличных — платёж сразу, затем {@code afterPaid};</li>
      *   <li>не хватает, но можно продать постройки и заложить имущество — заводится долг,
      *       игра переходит в {@link TurnPhase#PAYING_DEBT}, {@code afterPaid} выполнится после оплаты;</li>
-     *   <li>не покрыть даже всем имуществом — банкротство сразу.</li>
+     *   <li>не покрыть даже всем имуществом — «безнадёжный» долг: всем показывается карточка «Банкрот»,
+     *       банкротство выполнится, когда игрок нажмёт «Банкрот» (или по таймауту).</li>
      * </ul>
-     * При DEBT и BANKRUPT вызывающий код должен завершить действие через {@link #afterAction()}.
+     * При DEBT вызывающий код должен завершить действие через {@link #afterAction()}.
      */
     private Charge charge(Player from, Player to, int amount, Runnable afterPaid) {
         if (from.money() >= amount) {
@@ -913,14 +918,13 @@ public class Game {
             }
             return Charge.PAID;
         }
-        if (liquidationValue(from) >= amount) {
-            debts.addLast(new PendingDebt(new Debt(from.id(), to == null ? null : to.id(), amount), afterPaid));
-            log(from.name() + " должен $" + amount + (to == null ? " банку" : " игроку " + to.name())
-                    + ": нужно продать постройки или заложить имущество");
-            return Charge.DEBT;
-        }
-        goBankrupt(from, to);
-        return Charge.BANKRUPT;
+        String toWhom = to == null ? " банку" : " игроку " + to.name();
+        boolean hopeless = liquidationValue(from) < amount;
+        debts.addLast(new PendingDebt(new Debt(from.id(), to == null ? null : to.id(), amount, hopeless), afterPaid));
+        log(from.name() + " должен $" + amount + toWhom + (hopeless
+                ? ": не покрыть даже всем имуществом — банкротство"
+                : ": нужно продать постройки или заложить имущество"));
+        return Charge.DEBT;
     }
 
     private void transfer(Player from, Player to, int amount) {
@@ -1146,6 +1150,10 @@ public class Game {
 
     /** Расплата за игрока: продать все постройки, закладывать имущество, пока хватит, заплатить. */
     private void autoSettleDebt(Player p) {
+        if (debts.peekFirst().debt().hopeless()) {
+            doDeclareBankruptcy(p.id()); // покрыть нечем — сразу банкротство, имущество кредитору как есть
+            return;
+        }
         int amount = debts.peekFirst().debt().amount();
         int sold = sellAllBuildings(p);
         if (sold > 0) {

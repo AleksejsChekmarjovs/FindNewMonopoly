@@ -306,6 +306,10 @@ function renderDetails(g) {
     } else if (g.phase === "PAYMENT_DUE") {
         const what = g.paymentDue?.creditorId ? "аренду" : "налог";
         $("status").textContent = myTurn ? `Заплатите ${what}` : `${current.name} платит ${what}`;
+    } else if (g.phase === "PAYING_DEBT" && g.debt.hopeless) {
+        $("status").textContent = g.debt.debtorId === me.playerId
+            ? "Вы банкрот"
+            : `${nameOf(g.debt.debtorId)} — банкрот`;
     } else if (g.phase === "PAYING_DEBT") {
         $("status").textContent = g.debt.debtorId === me.playerId
             ? "Вам не хватает денег — расплатитесь с долгом"
@@ -1096,8 +1100,10 @@ $("card-reveal-close").onclick = () => {
 /** Панель долга: видна всем, кнопки — только должнику. */
 function renderDebt(g, nameOf) {
     const d = g.debt;
-    $("debt").classList.toggle("hidden", g.phase !== "PAYING_DEBT" || !d);
-    if (g.phase !== "PAYING_DEBT" || !d) return;
+    // безнадёжный долг — вместо панели долга карточка «Банкрот» по центру доски
+    renderBankruptCard(g, nameOf, d && d.hopeless && g.phase === "PAYING_DEBT" ? d : null);
+    $("debt").classList.toggle("hidden", g.phase !== "PAYING_DEBT" || !d || d.hopeless);
+    if (g.phase !== "PAYING_DEBT" || !d || d.hopeless) return;
 
     const debtor = g.players.find((p) => p.id === d.debtorId);
     const toWhom = d.creditorId ? `игроку ${nameOf(d.creditorId)}` : "банку";
@@ -1116,10 +1122,61 @@ function renderDebt(g, nameOf) {
 }
 
 $("pay-debt-btn").onclick = () => send({ type: "PAY_DEBT" });
-$("bankrupt-btn").onclick = () => {
-    if (confirm("Объявить банкротство? Всё имущество уйдёт кредитору, вы выбываете из игры.")) {
-        send({ type: "DECLARE_BANKRUPTCY" });
+
+/**
+ * Карточка «Банкрот».
+ * - Долг не покрыть ничем (hopeless): видят все, кнопка «Банкрот» — только у банкрота, отмены нет.
+ * - Игрок сам нажал «Объявить банкротство» в панели долга: та же карточка, но с кнопкой «Отмена».
+ */
+/** Игрок сам открыл карточку «Банкрот» из панели долга и ещё не ответил. */
+let voluntaryBankruptOpen = false;
+
+function renderBankruptCard(g, nameOf, hopelessDebt) {
+    const box = $("bankrupt-card");
+    // добровольная карточка переживает обновления состояния, пока у игрока всё ещё есть долг
+    const stillMyDebt = g.phase === "PAYING_DEBT" && g.debt?.debtorId === me.playerId;
+    if (voluntaryBankruptOpen && stillMyDebt && !hopelessDebt) {
+        fillBankruptCard(g, nameOf, g.debt, true);
+        return;
     }
+    voluntaryBankruptOpen = false;
+    box.classList.toggle("hidden", !hopelessDebt);
+    if (!hopelessDebt) return;
+    fillBankruptCard(g, nameOf, hopelessDebt, false);
+}
+
+function fillBankruptCard(g, nameOf, d, voluntary) {
+    const debtor = g.players.find((p) => p.id === d.debtorId);
+    const mine = d.debtorId === me.playerId;
+    const toWhom = d.creditorId ? `игроку ${nameOf(d.creditorId)}` : "банку";
+    const who = mine ? "Вы должны" : `${debtor.name} должен`;
+    $("bankrupt-text").textContent = voluntary
+        ? `Объявить банкротство? ${who} $${d.amount} ${toWhom}.`
+        : `${who} $${d.amount} ${toWhom} — этого не покрыть даже продажей и залогом всего имущества.`;
+    $("bankrupt-note").textContent =
+        `Деньги и всё имущество перейдут ${toWhom}. ${mine ? "Вы выбываете" : debtor.name + " выбывает"} из игры.`;
+    $("bankrupt-confirm").classList.toggle("hidden", !mine);
+    $("bankrupt-cancel").classList.toggle("hidden", !voluntary);
+    $("bankrupt-wait").classList.toggle("hidden", mine);
+    $("bankrupt-wait").textContent = `Ждём, пока ${debtor.name} подтвердит банкротство`;
+    if (mine) $("bankrupt-confirm").focus();
+}
+
+$("bankrupt-btn").onclick = () => {
+    // добровольное банкротство из панели долга — подтверждение той же карточкой «Банкрот»
+    const g = detailsGame;
+    voluntaryBankruptOpen = true;
+    fillBankruptCard(g, (id) => g.players.find((p) => p.id === id)?.name, g.debt, true);
+    $("bankrupt-card").classList.remove("hidden");
+};
+$("bankrupt-cancel").onclick = () => {
+    voluntaryBankruptOpen = false;
+    $("bankrupt-card").classList.add("hidden");
+};
+$("bankrupt-confirm").onclick = () => {
+    voluntaryBankruptOpen = false;
+    $("bankrupt-card").classList.add("hidden");
+    send({ type: "DECLARE_BANKRUPTCY" });
 };
 
 /**
@@ -1128,7 +1185,8 @@ $("bankrupt-btn").onclick = () => {
  */
 function renderPropertyPanel(g, myTurn) {
     // во время долга должник может только собирать деньги: продавать дома и закладывать
-    const inDebt = g.phase === "PAYING_DEBT" && g.debt.debtorId === me.playerId;
+    // (при безнадёжном долге — нет: продажа и залог уже ничего не изменят)
+    const inDebt = g.phase === "PAYING_DEBT" && g.debt.debtorId === me.playerId && !g.debt.hopeless;
     const canManage = inDebt
         || (myTurn && ["WAITING_FOR_ROLL", "AWAITING_BUY_DECISION", "TURN_END"].includes(g.phase));
     const mine = g.tiles.filter((t) => g.owners[t.index] === me.playerId);

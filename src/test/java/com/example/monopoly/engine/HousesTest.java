@@ -248,6 +248,8 @@ class HousesTest {
 
         dice.then(1, 3); // налог $200 — даже с продажей домов не хватает
         TestMoves.roll(g, "a");
+        assertThat(g.currentDebt().hopeless()).isTrue(); // карточка «Банкрот»
+        g.declareBankruptcy("a");
 
         assertThat(alice.bankrupt()).isTrue();
         assertThat(g.buildings()).isEmpty();
