@@ -10,6 +10,8 @@ let me = { playerId: null, roomId: null };
 let boardBuilt = false;
 /** Состояние, пришедшее во время анимации фишки: покажем, когда она дойдёт. */
 let pendingGame = null;
+/** Последнее отрисованное состояние — для карточки клетки. */
+let detailsGame = null;
 /** Кто из игроков сейчас подключён (id). */
 let online = new Set();
 
@@ -221,6 +223,8 @@ function buildBoard(tiles) {
             price.textContent = "$" + t.price;
             el.append(price);
         }
+        el.addEventListener("mouseenter", () => tileHoverStart(t.index));
+        el.addEventListener("mouseleave", tileHoverEnd);
         board.append(el);
     }
     // фишки живут в отдельном слое поверх поля — так их можно плавно двигать между клетками
@@ -269,6 +273,7 @@ function colorsOf(g) {
 
 /** Всё, кроме фишек и кубиков: клетки, статус, кнопки, панели, игроки, журнал. */
 function renderDetails(g) {
+    detailsGame = g;
     const colorOf = colorsOf(g);
 
     // владельцы и постройки
@@ -411,6 +416,182 @@ function buildingIcons(level) {
         house.title = "Дом";
         return house;
     });
+}
+
+// ---------------------------------------------------------------- карточка клетки
+
+/** Сколько держать мышь на клетке, прежде чем показать карточку. */
+const TILE_CARD_DELAY_MS = 1000;
+/** Время, чтобы перевести мышь с клетки на карточку, не закрыв её. */
+const TILE_CARD_GRACE_MS = 200;
+
+let tileHoverTimer = null;
+let tileCardCloseTimer = null;
+let tileCardIndex = null;
+
+function tileHoverStart(index) {
+    clearTimeout(tileHoverTimer);
+    clearTimeout(tileCardCloseTimer);
+    if (tileCardIndex === index) return; // карточка этой клетки уже открыта
+    tileHoverTimer = setTimeout(() => openTileCard(index), TILE_CARD_DELAY_MS);
+}
+
+function tileHoverEnd() {
+    clearTimeout(tileHoverTimer);
+    // даём время перейти на карточку; если мышь туда не попала — закрываем
+    tileCardCloseTimer = setTimeout(closeTileCard, TILE_CARD_GRACE_MS);
+}
+
+$("tile-card").addEventListener("mouseenter", () => clearTimeout(tileCardCloseTimer));
+$("tile-card").addEventListener("mouseleave", () => {
+    tileCardCloseTimer = setTimeout(closeTileCard, TILE_CARD_GRACE_MS);
+});
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeTileCard();
+});
+
+function closeTileCard() {
+    tileCardIndex = null;
+    $("tile-card").classList.add("hidden");
+}
+
+function openTileCard(index) {
+    const g = detailsGame;
+    if (!g) return;
+    tileCardIndex = index;
+    const card = $("tile-card");
+    card.replaceChildren(...tileCardContent(g, g.tiles[index]));
+    card.classList.remove("hidden");
+    placeTileCard(card, $("tile-" + index));
+}
+
+/** Рядом с клеткой: справа, если не влезает — слева; по вертикали — в пределах окна. */
+function placeTileCard(card, tileEl) {
+    const r = tileEl.getBoundingClientRect();
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    const gap = 8;
+    let left = r.right + gap;
+    if (left + w > window.innerWidth - gap) left = r.left - w - gap;
+    left = Math.max(gap, Math.min(left, window.innerWidth - w - gap));
+    let top = r.top + r.height / 2 - h / 2;
+    top = Math.max(gap, Math.min(top, window.innerHeight - h - gap));
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+}
+
+const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+};
+
+/** Таблица «название — сумма»; строка с current=true подсвечивается (действует сейчас). */
+function priceTable(rows) {
+    const table = el("table", "tile-card-table");
+    for (const { label, value, current } of rows) {
+        const tr = el("tr", current ? "current" : "");
+        tr.append(el("td", "", label), el("td", "", value));
+        table.append(tr);
+    }
+    return table;
+}
+
+function tileCardContent(g, t) {
+    const nameOf = (id) => g.players.find((p) => p.id === id)?.name;
+    const parts = [];
+
+    const head = el("div", "tile-card-head");
+    if (t.group) head.style.background = `var(--${t.group.toLowerCase()})`;
+    head.classList.toggle("plain", !t.group);
+    head.append(el("div", "tile-card-title", t.name));
+    if (t.price) head.append(el("div", "tile-card-price", `Цена $${t.price}`));
+    parts.push(head);
+
+    const body = el("div", "tile-card-body");
+    parts.push(body);
+
+    if (!t.type || !["PROPERTY", "RAILROAD", "UTILITY"].includes(t.type)) {
+        body.append(el("p", "tile-card-text", specialTileText(t)));
+        return parts;
+    }
+
+    const ownerId = g.owners[t.index];
+    const level = g.buildings[t.index] || 0;
+    const mortgaged = g.mortgaged.includes(t.index);
+    const ownedByOwner = (type) => g.tiles.filter((s) => s.type === type && g.owners[s.index] === ownerId).length;
+
+    if (t.type === "PROPERTY") {
+        const group = g.tiles.filter((s) => s.group === t.group);
+        const fullGroup = !!ownerId && group.every((s) => g.owners[s.index] === ownerId);
+        const houseCost = g.houseCosts[t.group];
+        const r = t.rent;
+        body.append(el("div", "tile-card-section", "Аренда"));
+        body.append(priceTable([
+            { label: "Без построек", value: `$${r[0]}`, current: !!ownerId && !fullGroup && level === 0 },
+            { label: "Вся группа цвета", value: `$${r[0] * 2}`, current: fullGroup && level === 0 },
+            { label: "1 дом", value: `$${r[1]}`, current: level === 1 },
+            { label: "2 дома", value: `$${r[2]}`, current: level === 2 },
+            { label: "3 дома", value: `$${r[3]}`, current: level === 3 },
+            { label: "4 дома", value: `$${r[4]}`, current: level === 4 },
+            { label: "Отель", value: `$${r[5]}`, current: level === 5 },
+        ]));
+        body.append(el("div", "tile-card-section", "Застройка"));
+        body.append(priceTable([
+            { label: "Дом", value: `$${houseCost}` },
+            { label: "Отель", value: `$${houseCost} + 4 дома` },
+            { label: "Продажа дома банку", value: `$${houseCost / 2}` },
+        ]));
+    } else if (t.type === "RAILROAD") {
+        const n = ownerId ? ownedByOwner("RAILROAD") : 0;
+        body.append(el("div", "tile-card-section", "Аренда — сколько дорог у владельца"));
+        body.append(priceTable([1, 2, 3, 4].map((k) => ({
+            label: k === 1 ? "1 дорога" : `${k} дороги`, value: `$${25 * 2 ** (k - 1)}`, current: n === k,
+        }))));
+    } else {
+        const n = ownerId ? ownedByOwner("UTILITY") : 0;
+        body.append(el("div", "tile-card-section", "Аренда — от суммы кубиков"));
+        body.append(priceTable([
+            { label: "Одно предприятие", value: "4 × кубики", current: n === 1 },
+            { label: "Оба предприятия", value: "10 × кубики", current: n === 2 },
+        ]));
+    }
+
+    // залог: половина цены, выкуп — залог + 10% с округлением вверх (как на сервере)
+    const value = t.price / 2;
+    body.append(el("div", "tile-card-section", "Залог"));
+    body.append(priceTable([
+        { label: "Заложить", value: `$${value}` },
+        { label: "Выкупить", value: `$${Math.ceil(value * 1.1)}` },
+    ]));
+
+    // с заложенной клетки аренда не берётся — «действующей» строки нет
+    if (mortgaged) {
+        body.querySelectorAll("tr.current").forEach((tr) => tr.classList.remove("current"));
+    }
+
+    const status = [];
+    status.push(ownerId ? `Владелец: ${nameOf(ownerId)}${ownerId === me.playerId ? " (вы)" : ""}` : "Свободна — у банка");
+    if (level === 5) status.push("Стоит отель");
+    else if (level > 0) status.push(`Домов: ${level}`);
+    if (mortgaged) status.push("Заложена — аренда не платится");
+    body.append(el("div", "tile-card-status", status.join(" · ")));
+    return parts;
+}
+
+function specialTileText(t) {
+    switch (t.type) {
+        case "GO": return "Каждый раз, проходя или попадая на «Старт», игрок получает $200.";
+        case "TAX": return `Попавший на клетку платит банку $${t.taxAmount}.`;
+        case "CHANCE": return "Возьмите верхнюю карточку «Шанс» и выполните написанное.";
+        case "COMMUNITY_CHEST": return "Возьмите верхнюю карточку «Общественная казна» и выполните написанное.";
+        case "JAIL": return "Просто в гостях — ничего не происходит. Из тюрьмы выходят: дубль, штраф $50 "
+            + "или карточка «Освободиться из тюрьмы»; после третьей неудачной попытки штраф обязателен.";
+        case "GO_TO_JAIL": return "Отправляйтесь прямо в тюрьму. «Старт» не проходите, $200 не получаете.";
+        case "FREE_PARKING": return "Бесплатная стоянка — просто отдых, ничего не происходит.";
+        default: return "";
+    }
 }
 
 // ---------------------------------------------------------------- фишки
