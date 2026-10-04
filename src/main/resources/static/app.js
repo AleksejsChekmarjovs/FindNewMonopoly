@@ -537,18 +537,19 @@ function renderDetails(g) {
         $("auction-title").textContent = `Аукцион: ${tile.name} (цена $${tile.price})`;
         $("auction-bid").textContent = a.highestBidderId
             ? `Ставка: $${a.highestBid} — ${nameOf(a.highestBidderId)}`
-            : "Ставок пока нет";
+            : `Ставок пока нет — стартовая цена $${a.startPrice}`;
         $("auction-bidders").textContent = "Участвуют: " + a.bidders.map(nameOf).join(", ");
         const myBid = a.currentBidderId === me.playerId;
         $("auction-controls").classList.toggle("hidden", !myBid);
         if (myBid) {
             const money = g.players.find((p) => p.id === me.playerId).money;
             const input = $("bid-input");
-            input.min = a.highestBid + 1;
+            auctionBase = a.highestBidderId ? a.highestBid : a.startPrice;
+            input.min = a.minBid;
             input.max = money;
-            if (!input.value || +input.value <= a.highestBid) input.value = Math.min(a.highestBid + 10, money);
+            if (!input.value || +input.value < a.minBid) input.value = a.minBid;
             for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
-                btn.disabled = a.highestBid + +btn.dataset.step > money;
+                btn.disabled = auctionBase + +btn.dataset.step > money;
             }
         }
     } else {
@@ -1499,16 +1500,14 @@ function renderPropertyPanel(g, myTurn) {
     $("property-list").replaceChildren(...rows);
 }
 
-// кнопки «+10/+50/+100» ставят сразу; поле ввода — для произвольной суммы
+// кнопки «+10/+50/+100» ставят сразу (к текущей ставке, а без ставок — к стартовой цене);
+// поле ввода — для произвольной суммы, по умолчанию в нём минимальная ставка
+let auctionBase = 0;
 for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
-    btn.onclick = () => send({ type: "BID", amount: currentHighestBid() + +btn.dataset.step });
+    btn.onclick = () => send({ type: "BID", amount: auctionBase + +btn.dataset.step });
 }
 $("bid-btn").onclick = () => send({ type: "BID", amount: parseInt($("bid-input").value, 10) });
 $("pass-btn").onclick = () => send({ type: "PASS" });
-
-function currentHighestBid() {
-    return +$("bid-input").min - 1;
-}
 
 // ---------------------------------------------------------------- ошибки
 

@@ -28,26 +28,72 @@ class AuctionTest {
         return g;
     }
 
+    // ---------------------------------------------------------------- кто участвует
+
     @Test
-    void declineStartsAuctionWithNextPlayer() {
+    void declineStartsAuctionWithNextPlayerWithoutTheDecliner() {
         Game g = aliceDeclinesBaltic(alice, bob, carol);
 
         assertThat(g.phase()).isEqualTo(TurnPhase.AUCTION);
         assertThat(g.auction().tileIndex()).isEqualTo(3);
-        assertThat(g.auction().bidders()).containsExactly("b", "c", "a");
+        assertThat(g.auction().bidders()).containsExactly("b", "c");
+        assertThat(g.auction().startPrice()).isEqualTo(60);
+        assertThat(g.auction().minBid()).isEqualTo(60);
         assertThat(g.auction().currentBidderId()).isEqualTo("b");
     }
 
     @Test
-    void highestBidderWinsAndPaysBank() {
-        Game g = aliceDeclinesBaltic(alice, bob);
+    void declinerCannotBid() {
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
+        g.bid("b", 60);
 
-        g.bid("b", 30);
-        g.bid("a", 40);
+        assertThatThrownBy(() -> g.bid("a", 70)).hasMessageContaining("не ваша очередь");
+    }
+
+    @Test
+    void playersWhoCannotAffordStartPriceDoNotTakePart() {
+        Player poorBob = new Player("b", "Bob", 59);
+        Game g = aliceDeclinesBaltic(alice, poorBob, carol);
+
+        assertThat(g.auction().bidders()).containsExactly("c");
+        assertThat(g.log()).anyMatch(l -> l.contains("Bob не участвует в аукционе"));
+    }
+
+    @Test
+    void nobodyCanAffordPropertyStaysWithBankWithoutAuction() {
+        Game g = aliceDeclinesBaltic(alice, new Player("b", "Bob", 10));
+
+        assertThat(g.auction()).isNull();
+        assertThat(g.owners()).doesNotContainKey(3);
+        assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
+    }
+
+    @Test
+    void bidderWhoCannotAffordNextBidDropsOut() {
+        Player bob100 = new Player("b", "Bob", 100);
+        Game g = aliceDeclinesBaltic(alice, bob100, carol);
+
+        g.bid("b", 60);
+        g.bid("c", 100); // Bob нужно $101, у него $100 — выбывает, Carol побеждает
+
+        assertThat(g.auction()).isNull();
+        assertThat(g.owners()).containsEntry(3, "c");
+        assertThat(carol.money()).isEqualTo(1500 - 100);
+        assertThat(g.log()).anyMatch(l -> l.contains("Bob выбывает из аукциона"));
+    }
+
+    // ---------------------------------------------------------------- ставки
+
+    @Test
+    void highestBidderWinsAndPaysBank() {
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
+
+        g.bid("b", 60);
+        g.bid("c", 70);
         g.passAuction("b");
 
-        assertThat(g.owners()).containsEntry(3, "a");
-        assertThat(alice.money()).isEqualTo(1500 - 40);
+        assertThat(g.owners()).containsEntry(3, "c");
+        assertThat(carol.money()).isEqualTo(1500 - 70);
         assertThat(bob.money()).isEqualTo(1500);
         assertThat(g.auction()).isNull();
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
@@ -55,58 +101,68 @@ class AuctionTest {
     }
 
     @Test
-    void bidBelowListPriceIsAllowed() {
-        Game g = aliceDeclinesBaltic(alice, bob, carol);
+    void singleBidderWinsAtStartPrice() {
+        Game g = aliceDeclinesBaltic(alice, bob);
 
-        g.bid("b", 1);
-        g.passAuction("c");
-        g.passAuction("a");
+        assertThat(g.auction().bidders()).containsExactly("b");
+        g.bid("b", 60);
 
         assertThat(g.owners()).containsEntry(3, "b");
-        assertThat(bob.money()).isEqualTo(1500 - 1);
+        assertThat(bob.money()).isEqualTo(1500 - 60);
+    }
+
+    @Test
+    void firstBidMustBeAtLeastStartPrice() {
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
+
+        assertThatThrownBy(() -> g.bid("b", 59)).hasMessageContaining("Минимальная ставка — $60");
+        g.bid("b", 60);
+        assertThat(g.auction().minBid()).isEqualTo(61);
+    }
+
+    @Test
+    void bidMustExceedCurrentHighest() {
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
+        g.bid("b", 80);
+
+        assertThatThrownBy(() -> g.bid("c", 80)).hasMessageContaining("Минимальная ставка — $81");
+        g.bid("c", 81);
+        assertThat(g.auction().highestBidderId()).isEqualTo("c");
     }
 
     @Test
     void passedPlayerLeavesAuction() {
-        Game g = aliceDeclinesBaltic(alice, bob, carol);
+        Player dave = new Player("d", "Dave", Game.START_MONEY);
+        Game g = aliceDeclinesBaltic(alice, bob, carol, dave);
 
         g.passAuction("b");
-        g.bid("c", 10);
-        g.bid("a", 20);
+        g.bid("c", 60);
+        g.bid("d", 70);
 
-        assertThat(g.auction().bidders()).containsExactly("c", "a");
+        assertThat(g.auction().bidders()).containsExactly("c", "d");
         assertThat(g.auction().currentBidderId()).isEqualTo("c");
 
-        g.bid("c", 25);
-        g.passAuction("a");
+        g.bid("c", 75);
+        g.passAuction("d");
 
         assertThat(g.owners()).containsEntry(3, "c");
-        assertThat(carol.money()).isEqualTo(1500 - 25);
+        assertThat(carol.money()).isEqualTo(1500 - 75);
     }
 
     @Test
     void nobodyBidsPropertyStaysWithBank() {
-        Game g = aliceDeclinesBaltic(alice, bob);
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
 
         g.passAuction("b");
-        g.passAuction("a");
+        g.passAuction("c");
 
         assertThat(g.owners()).doesNotContainKey(3);
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
     }
 
     @Test
-    void bidMustExceedCurrentHighest() {
-        Game g = aliceDeclinesBaltic(alice, bob);
-        g.bid("b", 30);
-
-        assertThatThrownBy(() -> g.bid("a", 30)).isInstanceOf(GameException.class);
-        assertThatThrownBy(() -> g.bid("a", 0)).isInstanceOf(GameException.class);
-    }
-
-    @Test
     void cannotBidMoreThanYouHave() {
-        Game g = aliceDeclinesBaltic(alice, bob);
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
 
         assertThatThrownBy(() -> g.bid("b", 1501))
                 .isInstanceOf(GameException.class)
@@ -115,11 +171,13 @@ class AuctionTest {
 
     @Test
     void onlyCurrentBidderCanAct() {
-        Game g = aliceDeclinesBaltic(alice, bob);
+        Game g = aliceDeclinesBaltic(alice, bob, carol);
 
-        assertThatThrownBy(() -> g.bid("a", 10)).isInstanceOf(GameException.class);
-        assertThatThrownBy(() -> g.passAuction("a")).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> g.bid("c", 60)).isInstanceOf(GameException.class);
+        assertThatThrownBy(() -> g.passAuction("c")).isInstanceOf(GameException.class);
     }
+
+    // ---------------------------------------------------------------- ход игры
 
     @Test
     void regularActionsBlockedDuringAuction() {

@@ -193,8 +193,8 @@ public class Game {
 
     private void doBid(String playerId, int amount) {
         Player p = requireBidder(playerId);
-        if (amount <= auction.highestBid()) {
-            throw new GameException("Ставка должна быть больше $" + auction.highestBid());
+        if (amount < auction.minBid()) {
+            throw new GameException("Минимальная ставка — $" + auction.minBid());
         }
         if (amount > p.money()) {
             throw new GameException("Недостаточно денег для такой ставки");
@@ -493,21 +493,38 @@ public class Game {
         throw new IllegalStateException("На поле нет клетки " + type);
     }
 
-    /** Торги начинает игрок после текущего; сам текущий тоже участвует, он последний в круге. */
+    /**
+     * Аукцион по цене клетки. Отказавшийся от покупки (текущий игрок) не участвует,
+     * как и те, кому не хватает денег на стартовую цену. Торги начинает следующий за текущим.
+     */
     private void startAuction(Tile tile) {
         List<String> bidders = new ArrayList<>();
-        for (int i = 1; i <= players.size(); i++) {
+        for (int i = 1; i < players.size(); i++) {
             Player pl = players.get((currentIndex + i) % players.size());
-            if (!pl.bankrupt()) {
+            if (pl.bankrupt()) {
+                continue;
+            }
+            if (pl.money() < tile.price()) {
+                log(pl.name() + " не участвует в аукционе: не хватает денег");
+            } else {
                 bidders.add(pl.id());
             }
         }
-        auction = new Auction(tile.index(), bidders);
+        auction = new Auction(tile.index(), tile.price(), bidders);
         phase = TurnPhase.AUCTION;
-        log("Аукцион: " + tile.name() + ". Ставку делает " + player(auction.currentBidderId()).name());
+        log("Аукцион: " + tile.name() + ", стартовая цена $" + tile.price());
+        finishAuctionIfDone();
+        if (auction != null) {
+            log("Ставку делает " + player(auction.currentBidderId()).name());
+        }
     }
 
+    /** Кому не хватает денег на следующую ставку — выбывает; торги окончены — клетка уходит победителю. */
     private void finishAuctionIfDone() {
+        while (!auction.finished() && player(auction.currentBidderId()).money() < auction.minBid()) {
+            log(player(auction.currentBidderId()).name() + " выбывает из аукциона: не хватает денег");
+            auction.pass(auction.currentBidderId());
+        }
         if (!auction.finished()) {
             return;
         }
