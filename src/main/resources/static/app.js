@@ -547,13 +547,18 @@ function renderDetails(g) {
             auctionBase = a.highestBidderId ? a.highestBid : a.startPrice;
             input.min = a.minBid;
             input.max = money;
-            if (!input.value || +input.value < a.minBid) input.value = a.minBid;
+            // новый аукцион или новая ставка — в поле минимальная ставка (в начале это стартовая цена);
+            // пока ничего не изменилось, не трогаем то, что игрок ввёл сам
+            const key = `${a.tileIndex}:${a.minBid}`;
+            if (bidInputKey !== key || !input.value) input.value = a.minBid;
+            bidInputKey = key;
             for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
                 btn.disabled = auctionBase + +btn.dataset.step > money;
             }
         }
     } else {
         $("bid-input").value = "";
+        bidInputKey = null;
     }
 
     // доступные действия
@@ -1503,6 +1508,8 @@ function renderPropertyPanel(g, myTurn) {
 // кнопки «+10/+50/+100» ставят сразу (к текущей ставке, а без ставок — к стартовой цене);
 // поле ввода — для произвольной суммы, по умолчанию в нём минимальная ставка
 let auctionBase = 0;
+/** Для какого аукциона и какой минимальной ставки заполнено поле ввода. */
+let bidInputKey = null;
 for (const btn of document.querySelectorAll("#auction-controls [data-step]")) {
     btn.onclick = () => send({ type: "BID", amount: auctionBase + +btn.dataset.step });
 }
