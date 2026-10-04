@@ -1,5 +1,6 @@
 package com.example.monopoly.ws;
 
+import com.example.monopoly.account.AccountService;
 import com.example.monopoly.engine.GameException;
 import com.example.monopoly.engine.GameView;
 import com.example.monopoly.lobby.LobbyService;
@@ -24,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Один WebSocket-эндпоинт /ws. Клиент шлёт {@link ClientMessage}, сервер рассылает
  * всем в комнате полное состояние (LOBBY или STATE). Ошибки уходят только отправителю.
  *
+ * <p>Войти в комнату (CREATE, JOIN) можно только с токеном аккаунта; без него — AUTH_REQUIRED.
+ *
  * <p>Переподключение: при входе игрок получает секретный токен (WELCOME) и после обрыва
  * возвращается на своё место сообщением RESUME. У игрока одно активное соединение:
  * новое закрывает старое с кодом {@link #CLOSE_OPENED_ELSEWHERE}.
@@ -40,11 +43,13 @@ public class GameSocketHandler extends TextWebSocketHandler {
     }
 
     private final LobbyService lobby;
+    private final AccountService accounts;
     private final ObjectMapper json;
     private final Map<String, Connection> connections = new ConcurrentHashMap<>();
 
-    public GameSocketHandler(LobbyService lobby, ObjectMapper json) {
+    public GameSocketHandler(LobbyService lobby, AccountService accounts, ObjectMapper json) {
         this.lobby = lobby;
+        this.accounts = accounts;
         this.json = json;
     }
 
@@ -53,8 +58,8 @@ public class GameSocketHandler extends TextWebSocketHandler {
         try {
             ClientMessage msg = json.readValue(message.getPayload(), ClientMessage.class);
             switch (msg.type()) {
-                case "CREATE" -> enter(raw, lobby.create(), msg.name());
-                case "JOIN" -> enter(raw, lobby.room(msg.roomId()), msg.name());
+                case "CREATE" -> enter(raw, msg.auth(), null);
+                case "JOIN" -> enter(raw, msg.auth(), msg.roomId());
                 case "RESUME" -> resume(raw, msg.roomId(), msg.token());
                 default -> handleInRoom(raw, msg);
             }
@@ -72,14 +77,18 @@ public class GameSocketHandler extends TextWebSocketHandler {
         return c != null ? c.session() : raw;
     }
 
-    private void enter(WebSocketSession raw, Room room, String name) {
+    /** Создать комнату (roomId == null) или войти в существующую от имени аккаунта. */
+    private void enter(WebSocketSession raw, String auth, String roomId) {
         if (connections.containsKey(raw.getId())) {
             throw new GameException("Вы уже в комнате");
         }
-        if (name == null || name.isBlank()) {
-            throw new GameException("Укажите имя");
+        AccountService.User user = accounts.authenticate(auth).orElse(null);
+        if (user == null) {
+            send(raw, Map.of("type", "AUTH_REQUIRED", "message", "Войдите в аккаунт"));
+            return;
         }
-        bind(raw, room, lobby.join(room, name.strip()));
+        Room room = roomId == null ? lobby.create() : lobby.room(roomId);
+        bind(raw, room, lobby.join(room, user.id(), user.username()));
     }
 
     /** Вернуться на своё место по токену. Неудача — RESUME_FAILED: клиент забывает сохранённую сессию. */

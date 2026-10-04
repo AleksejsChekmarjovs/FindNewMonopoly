@@ -16,9 +16,10 @@ public class Room {
      * Место игрока.
      *
      * @param playerId публичный id — его видят все в состоянии игры
+     * @param accountId аккаунт игрока: у аккаунта одно место в комнате
      * @param token секрет для возвращения в комнату после обрыва; знает только сам игрок
      */
-    public record Seat(String playerId, String name, String token) {
+    public record Seat(String playerId, long accountId, String name, String token) {
     }
 
     /** То, что можно показывать другим игрокам: без токена. */
@@ -33,14 +34,20 @@ public class Room {
         this.id = id;
     }
 
-    Seat join(String name) {
+    /** Войти в комнату. Уже есть место у этого аккаунта — возвращаем его (в том числе после старта). */
+    Seat join(long accountId, String name) {
+        for (Seat seat : seats) {
+            if (seat.accountId() == accountId) {
+                return seat;
+            }
+        }
         if (game != null) {
             throw new GameException("Игра уже началась");
         }
         if (seats.size() >= 8) {
             throw new GameException("Комната заполнена");
         }
-        Seat seat = new Seat(UUID.randomUUID().toString(), name, UUID.randomUUID().toString());
+        Seat seat = new Seat(UUID.randomUUID().toString(), accountId, name, UUID.randomUUID().toString());
         seats.add(seat);
         return seat;
     }

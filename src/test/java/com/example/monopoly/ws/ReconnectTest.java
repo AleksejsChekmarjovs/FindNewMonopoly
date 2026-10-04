@@ -2,6 +2,7 @@ package com.example.monopoly.ws;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.monopoly.account.AccountService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -9,12 +10,14 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -23,13 +26,19 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 /** Переподключение через настоящий WebSocket: выйти, вернуться по токену, вытеснить старую вкладку. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
 class ReconnectTest {
+
+    private static final AtomicInteger accountCounter = new AtomicInteger();
 
     @LocalServerPort
     int port;
 
     @Autowired
     ObjectMapper json;
+
+    @Autowired
+    AccountService accounts;
 
     private final java.util.List<Client> clients = new java.util.ArrayList<>();
 
@@ -79,6 +88,11 @@ class ReconnectTest {
         }
     }
 
+    /** Новый аккаунт (база общая для всех тестов класса — имена уникальные) и токен входа. */
+    private String login(String name) {
+        return accounts.register(name + accountCounter.incrementAndGet(), "secret1").token();
+    }
+
     private Client connect() throws Exception {
         Client c = new Client();
         c.session = new StandardWebSocketClient()
@@ -91,12 +105,12 @@ class ReconnectTest {
     @Test
     void playerReturnsToStartedGameWithToken() throws Exception {
         Client alice = connect();
-        alice.send(Map.of("type", "CREATE", "name", "Alice"));
+        alice.send(Map.of("type", "CREATE", "auth", login("Alice")));
         JsonNode aliceWelcome = alice.await("WELCOME");
         String roomId = aliceWelcome.get("roomId").asText();
 
         Client bob = connect();
-        bob.send(Map.of("type", "JOIN", "roomId", roomId, "name", "Bob"));
+        bob.send(Map.of("type", "JOIN", "roomId", roomId, "auth", login("Bob")));
         JsonNode bobWelcome = bob.await("WELCOME");
         String bobId = bobWelcome.get("playerId").asText();
         String bobToken = bobWelcome.get("token").asText();
@@ -121,7 +135,7 @@ class ReconnectTest {
     @Test
     void newConnectionReplacesOldOne() throws Exception {
         Client alice = connect();
-        alice.send(Map.of("type", "CREATE", "name", "Alice"));
+        alice.send(Map.of("type", "CREATE", "auth", login("Alice")));
         JsonNode welcome = alice.await("WELCOME");
 
         Client secondTab = connect();
@@ -138,7 +152,7 @@ class ReconnectTest {
     @Test
     void wrongTokenOrRoomFailsCleanly() throws Exception {
         Client alice = connect();
-        alice.send(Map.of("type", "CREATE", "name", "Alice"));
+        alice.send(Map.of("type", "CREATE", "auth", login("Alice")));
         String roomId = alice.await("WELCOME").get("roomId").asText();
 
         Client stranger = connect();
@@ -152,16 +166,46 @@ class ReconnectTest {
     @Test
     void tokensAreNeverSentToOtherPlayers() throws Exception {
         Client alice = connect();
-        alice.send(Map.of("type", "CREATE", "name", "Alice"));
+        alice.send(Map.of("type", "CREATE", "auth", login("Alice")));
         JsonNode welcome = alice.await("WELCOME");
         String roomId = welcome.get("roomId").asText();
 
         Client bob = connect();
-        bob.send(Map.of("type", "JOIN", "roomId", roomId, "name", "Bob"));
+        bob.send(Map.of("type", "JOIN", "roomId", roomId, "auth", login("Bob")));
         bob.await("WELCOME");
         JsonNode lobby = bob.await("LOBBY");
 
         assertThat(lobby.toString()).doesNotContain(welcome.get("token").asText());
         assertThat(lobby.get("players").get(0).has("token")).isFalse();
+    }
+
+    @Test
+    void enteringARoomRequiresLogin() throws Exception {
+        Client guest = connect();
+        guest.send(Map.of("type", "CREATE"));
+        guest.await("AUTH_REQUIRED");
+
+        guest.send(Map.of("type", "CREATE", "auth", "expired-or-fake"));
+        guest.await("AUTH_REQUIRED");
+    }
+
+    @Test
+    void playerNameComesFromAccountAndAccountHasOneSeat() throws Exception {
+        String aliceAuth = accounts.register("Alice" + accountCounter.incrementAndGet(), "secret1").token();
+        String aliceName = accounts.authenticate(aliceAuth).orElseThrow().username();
+        Client alice = connect();
+        alice.send(Map.of("type", "CREATE", "auth", aliceAuth));
+        JsonNode welcome = alice.await("WELCOME");
+        String roomId = welcome.get("roomId").asText();
+        assertThat(alice.await("LOBBY").get("players").get(0).get("name").asText()).isEqualTo(aliceName);
+
+        // тот же аккаунт входит по коду комнаты из другого окна — то же место, а не второе
+        Client otherWindow = connect();
+        otherWindow.send(Map.of("type", "JOIN", "roomId", roomId, "auth", aliceAuth));
+        assertThat(otherWindow.await("WELCOME").get("playerId").asText())
+                .isEqualTo(welcome.get("playerId").asText());
+        assertThat(otherWindow.await("LOBBY").get("players").size()).isEqualTo(1);
+        assertThat(alice.closed.get(5, TimeUnit.SECONDS).getCode())
+                .isEqualTo(GameSocketHandler.CLOSE_OPENED_ELSEWHERE.getCode());
     }
 }

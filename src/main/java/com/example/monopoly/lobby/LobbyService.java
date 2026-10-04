@@ -39,9 +39,9 @@ public class LobbyService {
         return room;
     }
 
-    public Room.Seat join(Room room, String name) {
+    public Room.Seat join(Room room, long accountId, String name) {
         synchronized (room) {
-            return room.join(name);
+            return room.join(accountId, name);
         }
     }
 

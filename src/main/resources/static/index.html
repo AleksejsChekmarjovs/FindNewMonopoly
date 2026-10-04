@@ -10,16 +10,31 @@
 
 <section id="lobby-screen" class="panel">
     <h1>Монополия</h1>
-    <label>Ваше имя <input id="name-input" maxlength="20" autocomplete="off"></label>
-    <div class="row">
-        <button id="create-btn">Создать комнату</button>
-    </div>
-    <div class="row">
-        <input id="room-input" placeholder="Код комнаты" maxlength="6" inputmode="numeric">
-        <button id="join-btn">Войти</button>
-    </div>
-    <div class="row hidden" id="resume-row">
-        <button id="resume-btn" class="secondary">Вернуться в партию <span id="resume-room"></span></button>
+    <form id="auth-form" class="hidden" novalidate>
+        <div class="auth-tabs" role="tablist">
+            <button type="button" role="tab" data-mode="login" class="active">Вход</button>
+            <button type="button" role="tab" data-mode="register">Регистрация</button>
+        </div>
+        <label>Имя игрока <input id="auth-username" maxlength="20" autocomplete="username" required></label>
+        <label>Пароль <input id="auth-password" type="password" autocomplete="current-password" required></label>
+        <div id="auth-hint" class="auth-hint hidden">Имя: 3–20 букв, цифр, «_» или «-». Пароль: от 6 символов.</div>
+        <button type="submit" id="auth-submit">Войти</button>
+    </form>
+    <div id="lobby-actions" class="hidden">
+        <div class="account-row">
+            <span>Вы вошли как <b id="account-name"></b></span>
+            <button id="logout-btn" class="secondary">Выйти</button>
+        </div>
+        <div class="row">
+            <button id="create-btn">Создать комнату</button>
+        </div>
+        <div class="row">
+            <input id="room-input" placeholder="Код комнаты" maxlength="6" inputmode="numeric">
+            <button id="join-btn">Войти в комнату</button>
+        </div>
+        <div class="row hidden" id="resume-row">
+            <button id="resume-btn" class="secondary">Вернуться в партию <span id="resume-room"></span></button>
+        </div>
     </div>
 </section>
 
