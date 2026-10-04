@@ -45,6 +45,116 @@ function clearSession() {
     try { localStorage.removeItem(SESSION_KEY); } catch { /* */ }
 }
 
+// ---------------------------------------------------------------- аккаунт
+
+/**
+ * {token, username} — вход в аккаунт. Как и сессия партии: у вкладки своя копия в sessionStorage
+ * (в соседней вкладке можно войти другим аккаунтом), в localStorage — последний вход, им открываются новые вкладки.
+ */
+const AUTH_KEY = "monopoly.auth";
+let auth = null;
+
+function saveAuth(a) {
+    auth = a;
+    const value = JSON.stringify(a);
+    try { sessionStorage.setItem(AUTH_KEY, value); } catch { /* */ }
+    try { localStorage.setItem(AUTH_KEY, value); } catch { /* */ }
+}
+
+function loadAuth() {
+    for (const storage of [() => sessionStorage, () => localStorage]) {
+        try {
+            const value = storage().getItem(AUTH_KEY);
+            if (value) return JSON.parse(value);
+        } catch { /* */ }
+    }
+    return null;
+}
+
+function clearAuth() {
+    auth = null;
+    try { sessionStorage.removeItem(AUTH_KEY); } catch { /* */ }
+    try { localStorage.removeItem(AUTH_KEY); } catch { /* */ }
+}
+
+async function authRequest(path, body) {
+    const headers = { "Content-Type": "application/json" };
+    if (auth) headers.Authorization = "Bearer " + auth.token;
+    const res = await fetch("/api/auth/" + path, {
+        method: body === undefined ? "GET" : "POST",
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = res.status === 204 ? null : await res.json().catch(() => null);
+    if (!res.ok) throw Object.assign(new Error(data?.message ?? "Ошибка сервера"), { status: res.status });
+    return data;
+}
+
+/** Первый экран: форма входа или, если вошли, кнопки комнат. */
+function renderAccount() {
+    $("auth-form").classList.toggle("hidden", !!auth);
+    $("lobby-actions").classList.toggle("hidden", !auth);
+    if (auth) $("account-name").textContent = auth.username;
+}
+
+let authMode = "login";
+
+function setAuthMode(mode) {
+    authMode = mode;
+    for (const b of document.querySelectorAll(".auth-tabs button")) {
+        b.classList.toggle("active", b.dataset.mode === mode);
+        b.setAttribute("aria-selected", b.dataset.mode === mode);
+    }
+    $("auth-submit").textContent = mode === "login" ? "Войти" : "Зарегистрироваться";
+    $("auth-password").autocomplete = mode === "login" ? "current-password" : "new-password";
+    $("auth-hint").classList.toggle("hidden", mode === "login");
+}
+
+for (const b of document.querySelectorAll(".auth-tabs button")) {
+    b.onclick = () => setAuthMode(b.dataset.mode);
+}
+
+$("auth-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const username = $("auth-username").value.trim();
+    const password = $("auth-password").value;
+    if (!username || !password) return showError("Укажите имя и пароль");
+    $("auth-submit").disabled = true;
+    try {
+        saveAuth(await authRequest(authMode, { username, password }));
+        $("auth-password").value = "";
+        renderAccount();
+    } catch (err) {
+        showError(err.message);
+    } finally {
+        $("auth-submit").disabled = false;
+    }
+};
+
+$("logout-btn").onclick = async () => {
+    try { await authRequest("logout", {}); } catch { /* всё равно забываем вход */ }
+    clearAuth();
+    renderAccount();
+};
+
+/** Сохранённый вход мог истечь — проверяем при загрузке. */
+async function checkAuth() {
+    auth = loadAuth();
+    renderAccount();
+    if (!auth) return;
+    try {
+        await authRequest("me");
+        saveAuth(auth); // копия во вкладку
+    } catch (err) {
+        if (err.status === 401) {
+            clearAuth();
+            renderAccount();
+        }
+    }
+}
+
+checkAuth();
+
 // ---------------------------------------------------------------- соединение
 
 const CLOSE_OPENED_ELSEWHERE = 4000;
@@ -110,6 +220,13 @@ function handle(msg) {
             online = new Set(msg.online);
             renderGame(msg.game);
             break;
+        case "AUTH_REQUIRED":
+            clearAuth();
+            renderAccount();
+            showError("Вход устарел — войдите снова");
+            socket.onclose = null; // это не обрыв — переподключаться не нужно
+            socket.close();
+            break;
         case "ERROR":
             showError(msg.message);
             break;
@@ -156,17 +273,12 @@ function hideBanner() {
 
 // ---------------------------------------------------------------- лобби
 
-$("create-btn").onclick = () => {
-    const name = $("name-input").value.trim();
-    if (!name) return showError("Укажите имя");
-    connect({ type: "CREATE", name });
-};
+$("create-btn").onclick = () => connect({ type: "CREATE", auth: auth?.token });
 
 $("join-btn").onclick = () => {
-    const name = $("name-input").value.trim();
     const roomId = $("room-input").value.trim();
-    if (!name || !roomId) return showError("Укажите имя и код комнаты");
-    connect({ type: "JOIN", name, roomId });
+    if (!roomId) return showError("Укажите код комнаты");
+    connect({ type: "JOIN", auth: auth?.token, roomId });
 };
 
 $("start-btn").onclick = () => send({ type: "START" });

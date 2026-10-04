@@ -49,6 +49,23 @@ body {
 .row { display: flex; gap: 8px; }
 .row input { flex: 1; min-width: 0; }
 
+/* ---- вход и регистрация ---- */
+#auth-form, #lobby-actions { display: flex; flex-direction: column; gap: 12px; }
+.auth-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.auth-tabs button {
+    flex: 1;
+    background: none;
+    color: var(--muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    margin-bottom: -1px;
+}
+.auth-tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.auth-hint { color: var(--muted); font-size: 12px; }
+.account-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-row button { padding: 4px 10px; }
+
 input, button {
     font: inherit;
     padding: 8px 12px;
