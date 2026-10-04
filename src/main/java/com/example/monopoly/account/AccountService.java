@@ -132,6 +132,11 @@ public class AccountService {
         return new Login(token, account.username());
     }
 
+    /** Токен из заголовка «Authorization: Bearer …»; нет заголовка — null. */
+    public static String bearerToken(String header) {
+        return header != null && header.startsWith("Bearer ") ? header.substring(7).strip() : null;
+    }
+
     static String hash(String token) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));

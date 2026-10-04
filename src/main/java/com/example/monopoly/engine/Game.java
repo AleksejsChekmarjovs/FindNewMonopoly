@@ -67,6 +67,8 @@ public class Game {
     private int doublesInRow = 0;
     private boolean extraRoll = false;
     private String winnerId;
+    /** Обанкротившиеся игроки в порядке выбывания — для мест в итогах партии. */
+    private final List<String> bankruptOrder = new ArrayList<>();
 
     /** Как считать аренду при попадании на клетку (карточки меняют правило). */
     private enum RentMode { NORMAL, DOUBLE, UTILITY_TEN_TIMES }
@@ -1032,6 +1034,7 @@ public class Game {
         }
         debts.removeIf(d -> d.debt().debtorId().equals(from.id()) || from.id().equals(d.debt().creditorId()));
         from.setBankrupt();
+        bankruptOrder.add(from.id());
         log(from.name() + " банкрот!" + (to == null ? "" : " Всё имущество переходит игроку " + to.name()));
     }
 
@@ -1301,6 +1304,16 @@ public class Game {
     /** Аренда или налог к оплате, или {@code null}. */
     public PaymentDue paymentDue() { return paymentDue; }
     public String winnerId() { return winnerId; }
+
+    /** Места: сначала оставшиеся в игре (по окончании — победитель), затем выбывшие — кто продержался дольше, тот выше. */
+    public List<String> standings() {
+        List<String> result = new ArrayList<>();
+        players.stream().filter(p -> !p.bankrupt()).map(Player::id).forEach(result::add);
+        for (int i = bankruptOrder.size() - 1; i >= 0; i--) {
+            result.add(bankruptOrder.get(i));
+        }
+        return result;
+    }
     public List<String> log() { return List.copyOf(log); }
 
     public Player player(String id) {

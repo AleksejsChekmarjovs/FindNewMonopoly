@@ -201,11 +201,7 @@ public class GameSocketHandler extends TextWebSocketHandler {
     @Scheduled(fixedRate = 1000)
     public void tick() {
         for (Room room : lobby.rooms()) {
-            boolean changed;
-            synchronized (room) {
-                changed = room.game() != null && room.game().tick();
-            }
-            if (changed) {
+            if (lobby.tick(room)) {
                 broadcast(room);
             }
         }

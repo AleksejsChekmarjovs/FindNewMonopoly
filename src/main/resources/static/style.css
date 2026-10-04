@@ -65,6 +65,8 @@ body {
 .auth-hint { color: var(--muted); font-size: 12px; }
 .account-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .account-row button { padding: 4px 10px; }
+.account-stats { color: var(--muted); font-size: 13px; }
+.account-stats b { color: var(--ink); }
 
 input, button {
     font: inherit;

@@ -94,7 +94,26 @@ async function authRequest(path, body) {
 function renderAccount() {
     $("auth-form").classList.toggle("hidden", !!auth);
     $("lobby-actions").classList.toggle("hidden", !auth);
-    if (auth) $("account-name").textContent = auth.username;
+    if (auth) {
+        $("account-name").textContent = auth.username;
+        loadStats();
+    }
+}
+
+/** Статистика сыгранных партий под именем аккаунта. */
+async function loadStats() {
+    const el = $("account-stats");
+    try {
+        const res = await fetch("/api/stats/me", { headers: { Authorization: "Bearer " + auth.token } });
+        if (!res.ok) throw new Error();
+        const s = await res.json();
+        el.innerHTML = s.played === 0
+            ? "Сыгранных партий пока нет"
+            : `Партий: <b>${s.played}</b> · побед: <b>${s.wins}</b> (${s.winPercent}%)`
+              + ` · поражений: <b>${s.losses}</b> (${s.lossPercent}%)`;
+    } catch {
+        el.textContent = "";
+    }
 }
 
 let authMode = "login";

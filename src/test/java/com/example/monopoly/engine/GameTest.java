@@ -237,6 +237,26 @@ class GameTest {
         assertThat(g.winnerId()).isEqualTo("r");
     }
 
+    @Test
+    void standingsPutWinnerFirstAndLastBankruptAboveFirst() {
+        Player first = new Player("p1", "First", 100);
+        Player second = new Player("p2", "Second", 100);
+        Player rich = new Player("r", "Rich", 1500);
+        Game g = newGame(first, second, rich);
+
+        dice.then(1, 3); // налог 200 при 100 на счету
+        TestMoves.roll(g, "p1");
+        g.declareBankruptcy("p1");
+        assertThat(g.standings()).containsExactly("p2", "r", "p1");
+
+        dice.then(1, 3);
+        TestMoves.roll(g, "p2");
+        g.declareBankruptcy("p2");
+
+        assertThat(g.phase()).isEqualTo(TurnPhase.GAME_OVER);
+        assertThat(g.standings()).containsExactly("r", "p2", "p1");
+    }
+
     // ---------------------------------------------------------------- помощники
 
     private void playAliceTurn(int d1, int d2) {

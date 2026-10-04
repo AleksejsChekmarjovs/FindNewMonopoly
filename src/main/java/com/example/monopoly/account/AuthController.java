@@ -41,14 +41,14 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) {
-        accounts.logout(bearer(auth));
+        accounts.logout(AccountService.bearerToken(auth));
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")
     public ResponseEntity<Map<String, String>> me(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) {
-        return accounts.authenticate(bearer(auth))
+        return accounts.authenticate(AccountService.bearerToken(auth))
                 .map(u -> ResponseEntity.ok(Map.of("username", u.username())))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("message", "Войдите в аккаунт")));
@@ -57,9 +57,5 @@ public class AuthController {
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<Map<String, String>> onAuthError(AuthException e) {
         return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-    }
-
-    private static String bearer(String header) {
-        return header != null && header.startsWith("Bearer ") ? header.substring(7).strip() : null;
     }
 }
