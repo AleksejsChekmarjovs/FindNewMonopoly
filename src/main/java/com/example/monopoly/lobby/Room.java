@@ -4,10 +4,14 @@ import com.example.monopoly.engine.Dice;
 import com.example.monopoly.engine.Game;
 import com.example.monopoly.engine.GameException;
 import com.example.monopoly.engine.Player;
+import com.example.monopoly.engine.TurnPhase;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 /** Игровая комната: лобби до старта и сама партия после. Все методы вызываются под локом комнаты. */
 public class Room {
@@ -29,6 +33,9 @@ public class Room {
     private final String id;
     private final List<Seat> seats = new ArrayList<>();
     private Game game;
+    private Instant startedAt;
+    /** Итог партии уже записан в статистику. */
+    private boolean resultRecorded;
 
     Room(String id) {
         this.id = id;
@@ -52,7 +59,12 @@ public class Room {
         return seat;
     }
 
-    void start(String playerId) {
+    void start(String playerId, Instant now) {
+        start(playerId, now, players -> new Game(players, Dice.random()));
+    }
+
+    /** newGame — как создать партию из игроков комнаты (в тестах — свои кубики и деньги). */
+    void start(String playerId, Instant now, Function<List<Player>, Game> newGame) {
         if (game != null) {
             throw new GameException("Игра уже началась");
         }
@@ -62,7 +74,19 @@ public class Room {
         List<Player> players = seats.stream()
                 .map(s -> new Player(s.playerId(), s.name(), Game.START_MONEY))
                 .toList();
-        game = new Game(players, Dice.random());
+        game = newGame.apply(players);
+        startedAt = now;
+    }
+
+    /** Партия закончилась, а итог ещё не записан: отмечаем и отдаём аккаунты по местам (первый — победитель). */
+    Optional<List<Long>> takeResult() {
+        if (game == null || game.phase() != TurnPhase.GAME_OVER || resultRecorded) {
+            return Optional.empty();
+        }
+        resultRecorded = true;
+        return Optional.of(game.standings().stream()
+                .map(id -> seats.stream().filter(s -> s.playerId().equals(id)).findFirst().orElseThrow().accountId())
+                .toList());
     }
 
     Seat seatByToken(String token) {
@@ -77,4 +101,5 @@ public class Room {
         return seats.stream().map(s -> new PublicSeat(s.playerId(), s.name())).toList();
     }
     public Game game() { return game; }
+    public Instant startedAt() { return startedAt; }
 }
