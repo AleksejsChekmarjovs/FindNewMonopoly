@@ -38,7 +38,7 @@ public record GameView(
     public record CardView(DeckType deck, String text, Card.Kind kind) {
     }
 
-    public record AuctionView(int tileIndex, int highestBid, String highestBidderId,
+    public record AuctionView(int tileIndex, int startPrice, int minBid, int highestBid, String highestBidderId,
                               String currentBidderId, List<String> bidders) {
     }
 
@@ -71,7 +71,7 @@ public record GameView(
                 game.lastRoll(),
                 game.rollNumber(),
                 card == null ? null : new CardView(card.deck(), card.text(), card.kind()),
-                a == null ? null : new AuctionView(a.tileIndex(), a.highestBid(), a.highestBidderId(),
+                a == null ? null : new AuctionView(a.tileIndex(), a.startPrice(), a.minBid(), a.highestBid(), a.highestBidderId(),
                         a.currentBidderId(), a.bidders()),
                 game.currentDebt(),
                 game.paymentDue(),

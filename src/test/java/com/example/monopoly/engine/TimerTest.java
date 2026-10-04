@@ -17,6 +17,7 @@ class TimerTest {
     private final MutableClock clock = new MutableClock();
     private final Player alice = new Player("a", "Alice", Game.START_MONEY);
     private final Player bob = new Player("b", "Bob", Game.START_MONEY);
+    private final Player carol = new Player("c", "Carol", Game.START_MONEY);
 
     private Game newGame(Card chestCard, Player... players) {
         return new Game(List.of(players), dice,
@@ -95,16 +96,16 @@ class TimerTest {
 
     @Test
     void silentBiddersPassAfterThirtySeconds() {
-        Game g = newGame(alice, bob);
+        Game g = newGame(alice, bob, carol);
         dice.then(1, 2); // -> 3 Baltic
         TestMoves.roll(g, "a");
         g.declineBuy("a");
-        g.bid("b", 10);   // очередь Alice
+        g.bid("b", 60);   // очередь Carol
 
         clock.advance(ofSeconds(29));
         assertThat(g.tick()).isFalse();
         clock.advance(ofSeconds(1));
-        g.tick();         // Alice молчит -> пас, Bob выигрывает
+        g.tick();         // Carol молчит -> пас, Bob выигрывает
 
         assertThat(g.owners()).containsEntry(BALTIC, "b");
         assertThat(g.phase()).isEqualTo(TurnPhase.TURN_END);
@@ -112,14 +113,14 @@ class TimerTest {
 
     @Test
     void eachBidGetsFreshTime() {
-        Game g = newGame(alice, bob);
+        Game g = newGame(alice, bob, carol);
         dice.then(1, 2);
         TestMoves.roll(g, "a");
         g.declineBuy("a");
 
         clock.advance(ofSeconds(25));
-        g.bid("b", 10);
-        clock.advance(ofSeconds(25)); // у Alice свои 30 секунд
+        g.bid("b", 60);
+        clock.advance(ofSeconds(25)); // у Carol свои 30 секунд
 
         assertThat(g.tick()).isFalse();
         assertThat(g.phase()).isEqualTo(TurnPhase.AUCTION);
