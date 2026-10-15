@@ -529,6 +529,7 @@ function renderDetails(g) {
 
     renderCardReveal(g, current, myTurn);
     renderPaymentDue(g, current, myTurn);
+    const buyOfferOpen = renderBuyOffer(g, current, myTurn);
 
     // последняя вытянутая карточка (пока она открыта крупно по центру — маленькую не показываем)
     const card = $("card");
@@ -584,8 +585,9 @@ function renderDetails(g) {
     const mePlayer = g.players.find((p) => p.id === me.playerId);
     const allowed = {
         ROLL: g.phase === "WAITING_FOR_ROLL",
-        BUY: g.phase === "AWAITING_BUY_DECISION",
-        DECLINE: g.phase === "AWAITING_BUY_DECISION",
+        // пока открыто окно покупки, кнопки — в нём; здесь они нужны, только если окно свернули
+        BUY: g.phase === "AWAITING_BUY_DECISION" && !buyOfferOpen,
+        DECLINE: g.phase === "AWAITING_BUY_DECISION" && !buyOfferOpen,
         PAY_JAIL_FINE: g.phase === "WAITING_FOR_ROLL" && mePlayer?.inJail,
         USE_JAIL_CARD: g.phase === "WAITING_FOR_ROLL" && mePlayer?.inJail && mePlayer.jailFreeCards > 0,
         END_TURN: g.phase === "TURN_END",
@@ -1347,6 +1349,61 @@ function renderPaymentDue(g, current, myTurn) {
     $("payment-due-wait").textContent = `Ждём, пока ${current.name} заплатит`;
     if (myTurn) $("payment-due-pay").focus();
 }
+
+/**
+ * Окно покупки: игрок попал на свободное поле. Видно всем — карточка клетки, цена и наличные покупателя;
+ * кнопки «Купить» и «Не покупать» — только ему. Не хватает денег — окно можно свернуть,
+ * заложить или продать имущество и купить кнопкой на панели действий.
+ */
+let buyOfferCollapsedFor = null;
+
+function renderBuyOffer(g, current, myTurn) {
+    const box = $("buy-offer");
+    const key = `${g.rollNumber}:${current.position}`;
+    const open = g.phase === "AWAITING_BUY_DECISION" && !(myTurn && buyOfferCollapsedFor === key);
+    box.classList.toggle("hidden", !open);
+    if (!open) return false;
+
+    const tile = g.tiles[current.position];
+    box.style.setProperty("--card-color", tile.group ? `var(--${tile.group.toLowerCase()})` : "var(--accent)");
+    // на светлых цветах (голубой, жёлтый) белый текст не читается
+    box.classList.toggle("light", ["LIGHT_BLUE", "YELLOW"].includes(tile.group));
+    const card = $("buy-offer-card");
+    card.replaceChildren(...tileCardContent(g, tile));
+    card.dataset.key = key;
+
+    const short = current.money < tile.price;
+    $("buy-offer-price").textContent = `$${tile.price}`;
+    $("buy-offer-cash").textContent = `$${current.money}`;
+    document.querySelector(".buy-offer-cash").classList.toggle("short", short);
+    $("buy-offer-cash").previousElementSibling.textContent = myTurn ? "Ваши наличные" : "Наличные игрока";
+
+    $("buy-offer-note").textContent = !myTurn ? ""
+        : short ? `Не хватает $${tile.price - current.money}. Можно заложить или продать имущество — или не покупать, тогда будет аукцион.`
+        : `После покупки останется $${current.money - tile.price}. Если не покупать — аукцион, стартовая цена $${tile.price}.`;
+    $("buy-offer-buy").textContent = `Купить за $${tile.price}`;
+    $("buy-offer-buy").disabled = short;
+    for (const id of ["buy-offer-buy", "buy-offer-decline"]) $(id).classList.toggle("hidden", !myTurn);
+    $("buy-offer-collapse").classList.toggle("hidden", !myTurn || !short);
+    $("buy-offer-wait").textContent = myTurn ? "" : `Ждём, купит ли ${current.name} это поле`;
+    if (myTurn && !short) $("buy-offer-buy").focus();
+    return true;
+}
+
+$("buy-offer-buy").onclick = () => {
+    $("buy-offer").classList.add("hidden");
+    send({ type: "BUY" });
+};
+$("buy-offer-decline").onclick = () => {
+    $("buy-offer").classList.add("hidden");
+    send({ type: "DECLINE" });
+};
+$("buy-offer-collapse").onclick = () => {
+    buyOfferCollapsedFor = $("buy-offer-card").dataset.key;
+    $("buy-offer").classList.add("hidden");
+    // кнопки «Купить» / «Не покупать» вернутся на панель действий при следующей отрисовке
+    if (detailsGame) renderDetails(detailsGame);
+};
 
 $("payment-due-pay").onclick = () => {
     // скрываем сразу — дальше обновится остальной интерфейс (деньги, журнал, долг)

@@ -227,6 +227,50 @@ body.animating #center input {
 .payment-due-owner { font-size: 14px; color: var(--muted); }
 .payment-due-amount { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .card-reveal.payment button { text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
+/* окно покупки свободного поля: рамка цвета группы, внутри карточка клетки */
+.card-reveal.buy-offer { width: min(360px, 70%); max-height: 94%; gap: 10px; }
+.buy-offer-card {
+    width: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    text-align: left;
+    font-size: 13px;
+}
+.buy-offer-card .tile-card-head { cursor: default; }
+.buy-offer-money { display: flex; width: 100%; gap: 8px; }
+.buy-offer-money > div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: var(--board);
+    font-variant-numeric: tabular-nums;
+}
+.buy-offer-money span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.buy-offer-money b { font-size: 24px; font-weight: 800; }
+.buy-offer-price { outline: 3px solid var(--card-color); outline-offset: -3px; }
+.buy-offer-cash.short b { color: var(--danger); }
+.buy-offer-buttons { display: flex; gap: 8px; }
+.card-reveal.buy-offer button { text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
+.card-reveal.buy-offer .card-reveal-deck { color: var(--muted); }
+.card-reveal.buy-offer.light button:not(.secondary):not(.link-button) { color: var(--ink); text-shadow: none; }
+.card-reveal.buy-offer button.secondary { background: var(--tile); color: var(--ink); border-color: var(--line); text-shadow: none; }
+.card-reveal.buy-offer button:disabled { opacity: .4; }
+.card-reveal.buy-offer .link-button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    text-decoration: underline;
+    text-shadow: none;
+    font-size: 13px;
+}
 /* карточка «Банкрот»: тёмная, с красной рамкой */
 .card-reveal.bankrupt {
     --card-color: var(--danger);

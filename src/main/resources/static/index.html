@@ -125,7 +125,22 @@
             <button id="payment-due-pay"></button>
             <div id="payment-due-wait" class="card-reveal-wait"></div>
         </div>
-        <div id="bankrupt-card" class="card-reveal bankrupt hidden" role="alertdialog" aria-live="assertive">
+        <div id="buy-offer" class="card-reveal buy-offer hidden" role="dialog" aria-live="polite">
+            <div class="card-reveal-deck">Свободное поле</div>
+            <div id="buy-offer-card" class="buy-offer-card"></div>
+            <div class="buy-offer-money">
+                <div class="buy-offer-price"><span>Цена</span><b id="buy-offer-price"></b></div>
+                <div class="buy-offer-cash"><span>Наличные</span><b id="buy-offer-cash"></b></div>
+            </div>
+            <div id="buy-offer-note" class="card-reveal-wait"></div>
+            <div class="buy-offer-buttons">
+                <button id="buy-offer-buy"></button>
+                <button id="buy-offer-decline" class="secondary">Не покупать</button>
+            </div>
+            <button id="buy-offer-collapse" class="link-button hidden">Свернуть окно, чтобы заложить имущество</button>
+            <div id="buy-offer-wait" class="card-reveal-wait"></div>
+        </div>
+        <div id="bankrupt-card"class="card-reveal bankrupt hidden" role="alertdialog" aria-live="assertive">
             <div class="bankrupt-title">Банкрот</div>
             <div id="bankrupt-text" class="bankrupt-text"></div>
             <div id="bankrupt-note" class="card-reveal-wait"></div>
