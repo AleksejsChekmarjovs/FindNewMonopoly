@@ -1362,6 +1362,7 @@ function renderBuyOffer(g, current, myTurn) {
     const key = `${g.rollNumber}:${current.position}`;
     const open = g.phase === "AWAITING_BUY_DECISION" && !(myTurn && buyOfferCollapsedFor === key);
     box.classList.toggle("hidden", !open);
+    spotlightTile(open ? current.position : null, g);
     if (!open) return false;
 
     const tile = g.tiles[current.position];
@@ -1390,17 +1391,32 @@ function renderBuyOffer(g, current, myTurn) {
     return true;
 }
 
+/** Выделить клетку: остальные клетки и центр доски затемняются. null — снять выделение. */
+function spotlightTile(index, g) {
+    $("board").classList.toggle("spotlight", index != null);
+    for (const t of g.tiles) {
+        $("tile-" + t.index).classList.toggle("spotlit", t.index === index);
+    }
+    if (index != null) {
+        const tile = g.tiles[index];
+        $("board").style.setProperty("--spot", tile.group ? `var(--${tile.group.toLowerCase()})` : "var(--accent)");
+    }
+}
+
 $("buy-offer-buy").onclick = () => {
     $("buy-offer").classList.add("hidden");
+    $("board").classList.remove("spotlight");
     send({ type: "BUY" });
 };
 $("buy-offer-decline").onclick = () => {
     $("buy-offer").classList.add("hidden");
+    $("board").classList.remove("spotlight");
     send({ type: "DECLINE" });
 };
 $("buy-offer-collapse").onclick = () => {
     buyOfferCollapsedFor = $("buy-offer-card").dataset.key;
     $("buy-offer").classList.add("hidden");
+    $("board").classList.remove("spotlight");
     // кнопки «Купить» / «Не покупать» вернутся на панель действий при следующей отрисовке
     if (detailsGame) renderDetails(detailsGame);
 };
