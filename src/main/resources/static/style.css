@@ -139,7 +139,7 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 /* окно покупки: остальные клетки и центр затемнены, выбранная клетка — яркая, с обводкой и свечением цвета группы */
 .tile, #center { transition: filter 300ms ease; }
 #board.spotlight .tile:not(.spotlit),
-#board.spotlight #center { filter: brightness(.45) saturate(.6); }
+#board.spotlight #center { filter: brightness(.7) saturate(.8); }
 #board.spotlight .tile.spotlit {
     z-index: 1;
     outline: 3px solid var(--spot);
