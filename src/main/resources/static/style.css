@@ -136,6 +136,23 @@ button.danger { background: var(--tile); color: var(--danger); border-color: var
 .tile .name { flex: 1; display: flex; align-items: center; }
 .tile .price { color: var(--muted); }
 .tile.owned { box-shadow: inset 0 0 0 3px var(--owner); }
+/* окно покупки: остальные клетки и центр затемнены, выбранная клетка — яркая, с обводкой и свечением цвета группы */
+.tile, #center { transition: filter 300ms ease; }
+#board.spotlight .tile:not(.spotlit),
+#board.spotlight #center { filter: brightness(.45) saturate(.6); }
+#board.spotlight .tile.spotlit {
+    z-index: 1;
+    outline: 3px solid var(--spot);
+    outline-offset: -2px;
+    box-shadow: 0 0 0 3px #fff, 0 0 24px 8px var(--spot);
+    animation: spot-pulse 1.6s ease-in-out infinite alternate;
+}
+@keyframes spot-pulse {
+    to { box-shadow: 0 0 0 3px #fff, 0 0 12px 3px var(--spot); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #board.spotlight .tile.spotlit { animation: none; }
+}
 /* ---- фишки ---- */
 #board { position: relative; }
 #piece-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
@@ -228,7 +245,8 @@ body.animating #center input {
 .payment-due-amount { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .card-reveal.payment button { text-shadow: 0 1px 2px rgb(0 0 0 / .45); }
 /* окно покупки свободного поля: рамка цвета группы, внутри карточка клетки */
-.card-reveal.buy-offer { width: min(360px, 70%); max-height: 94%; gap: 10px; }
+/* не выше центра доски (углы — 1.6 из 12.2 долей с каждой стороны): клетки по краю, в том числе выделенная, остаются видны */
+.card-reveal.buy-offer { width: min(360px, 70%); max-height: 72%; gap: 10px; }
 .buy-offer-card {
     width: 100%;
     flex: 0 1 auto;
